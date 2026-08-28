@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>東京予定表 | リアルタイム予定表</title>
+  <meta name="description" content="社内スケジュール共有Webアプリケーション。ログイン不要でリアルタイム閲覧。PCマトリックス（1週間/半月/1ヶ月）とスマホ表示に対応。">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Firebase App & Firestore Compat SDK (CDN) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+</head>
+
+<body class="mode-readonly">
+  <!-- Top Navigation Header -->
+  <header class="app-header">
+    <div class="header-main">
+      <!-- Left: Logo & Brand -->
+      <div class="brand-container">
+        <div class="app-logo">
+          <span>📅</span>
+        </div>
+        <div class="brand-text">
+          <div class="brand-title-row">
+            <h1 class="brand-title">東京予定表</h1>
+            <!-- Auth Status Badges -->
+            <span id="badgeReadOnly" class="auth-status-badge badge-readonly">👀 閲覧専用</span>
+            <span id="badgeAdminMode" class="auth-status-badge badge-admin" style="display:none;">✏️ 編集中</span>
+            <!-- Cloud Sync Indicator -->
+            <span id="syncIndicator" class="sync-indicator" title="クラウド同期状態">🟢 同期中</span>
+          </div>
+          <p class="brand-subtitle">東京予定表 リアルタイム共有システム</p>
+        </div>
+      </div>
+
+      <!-- Center: Date Control Bar -->
+      <div class="date-control-panel">
+        <button id="prevDateBtn" class="date-arrow-btn" title="前の期間へ (スワイプでも移動可能)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
+
+        <div class="date-current-wrapper">
+          <input type="date" id="hiddenDatePicker" class="hidden-date-input" value="2026-08-19">
+          <button id="dateDisplayBtn" class="date-display-trigger" title="カレンダーから日付を選択">
+            <span class="cal-icon">🗓️</span>
+            <span id="currentDateDisplay" class="date-label">2026年8月19日 (水)</span>
+            <span class="dropdown-arrow">▼</span>
+          </button>
+        </div>
+
+        <button id="nextDateBtn" class="date-arrow-btn" title="次の期間へ (スワイプでも移動可能)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M9 18l6-6-6-6" />
+          </svg>
+        </button>
+
+        <button id="todayBtn" class="btn-today">今日へ</button>
+      </div>
+
+      <!-- Right: Desktop Actions & Mobile Hamburger -->
+      <div class="header-right-actions">
+        <!-- Admin Unlock / Lock Button -->
+        <button id="btnAdminLogin" class="btn-action-tool btn-tool-auth" title="管理者ログインして編集モードに切り替え">
+          <span>🔒 管理者</span>
+        </button>
+        <button id="btnAdminLogout" class="btn-action-tool btn-tool-logout" style="display:none;" title="閲覧専用モードに戻る">
+          <span>🔓 閲覧へ</span>
+        </button>
+
+        <!-- Desktop-Only Action Tools -->
+        <div class="desktop-action-group">
+          <button id="btnNewSchedule" class="btn-new-schedule auth-only">
+            <span class="plus-icon">➕</span>
+            <span>予定を追加</span>
+          </button>
+
+          <button id="btnBatchActions" class="btn-action-tool auth-only" title="期間指定で一括登録や一括削除">
+            <span>⚡ 一括操作</span>
+          </button>
+
+          <button id="btnManageMembers" class="btn-action-tool auth-only" title="担当メンバーの追加・変更・削除">
+            <span>👥 メンバー</span>
+          </button>
+
+          <button id="btnExportData" class="btn-action-tool btn-tool-save auth-only" title="スケジュールをJSONファイルとして保存">
+            <span>💾 保存</span>
+          </button>
+
+          <button id="btnImportData" class="btn-action-tool auth-only" title="JSONファイルを読み込み">
+            <span>📂 読込</span>
+          </button>
+        </div>
+
+        <!-- View Switcher (PC vs スマホ) -->
+        <div class="view-toggle-container">
+          <button id="btnPcView" class="view-toggle-btn active" data-view="pc" title="PC俯瞰表示">
+            <span class="btn-icon">🖥️</span>
+            <span class="btn-label-text">PC</span>
+          </button>
+          <button id="btnMobileView" class="view-toggle-btn" data-view="mobile" title="スマホ表示">
+            <span class="btn-icon">📱</span>
+            <span class="btn-label-text">スマホ</span>
+          </button>
+        </div>
+
+        <!-- Mobile Hamburger Button -->
+        <button id="btnHamburgerMenu" class="hamburger-menu-btn" aria-label="メニューを開く" title="メニュー">
+          <span class="hamburger-line"></span>
+          <span class="hamburger-line"></span>
+          <span class="hamburger-line"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Secondary Ribbon: View Span Tabs & Filters (Mobile Scrollable) -->
+    <div class="filter-ribbon">
+      <!-- 期間スパン切り替えタブ (PC・スマホ共通) -->
+      <div class="span-toggle-group">
+        <div class="span-tabs">
+          <button class="span-tab active" data-span="week">1週間 (7日)</button>
+          <button class="span-tab" data-span="halfmonth">半月 (15日)</button>
+          <button class="span-tab" data-span="month">1ヶ月 (月毎)</button>
+        </div>
+      </div>
+
+      <!-- Member Filter Chips (Horizontal Scrollable) -->
+      <div class="filter-group">
+        <div class="member-filter-list" id="memberFilterList">
+          <button class="member-pill active" data-member="ALL">全員</button>
+          <button class="member-pill" data-member="M">M</button>
+          <button class="member-pill" data-member="R">R</button>
+          <button class="member-pill" data-member="Z">Z</button>
+          <button class="member-pill" data-member="吉">吉</button>
+          <button class="member-pill" data-member="黒">黒</button>
+        </div>
+      </div>
+
+      <!-- Free Word Search -->
+      <div class="search-box-wrapper">
+        <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2">
+          <circle cx="11" cy="11" r="8" />
+          <path d="M21 21l-4.35-4.35" />
+        </svg>
+        <input type="text" id="searchInput" class="search-input" placeholder="現場・メンバー検索..." />
+        <button id="searchClearBtn" class="search-clear-btn" style="display:none;">&times;</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Mobile Drawer Menu (ドロワーサイドバー) -->
+  <div id="mobileDrawerOverlay" class="drawer-overlay"></div>
+  <aside id="mobileNavDrawer" class="mobile-nav-drawer">
+    <div class="drawer-header">
+      <div class="drawer-brand">
+        <span class="app-logo-sm">📅</span>
+        <span class="drawer-title">メニュー</span>
+      </div>
+      <button id="btnDrawerClose" class="drawer-close-btn">&times;</button>
+    </div>
+    <div class="drawer-body">
+      <div class="drawer-section auth-only">
+        <div class="drawer-section-title">管理操作</div>
+        <button id="drawerBtnNewSchedule" class="drawer-menu-item item-primary">
+          <span>➕ 新規予定の追加</span>
+        </button>
+        <button id="drawerBtnBatchActions" class="drawer-menu-item">
+          <span>⚡ 予定の一括操作 (登録/削除)</span>
+        </button>
+        <button id="drawerBtnManageMembers" class="drawer-menu-item">
+          <span>👥 担当メンバー管理</span>
+        </button>
+      </div>
+
+      <div class="drawer-section auth-only">
+        <div class="drawer-section-title">データバックアップ</div>
+        <button id="drawerBtnExportData" class="drawer-menu-item">
+          <span>💾 schedules.json を保存</span>
+        </button>
+        <button id="drawerBtnImportData" class="drawer-menu-item">
+          <span>📂 JSONファイルを読み込み</span>
+        </button>
+      </div>
+
+      <div class="drawer-section">
+        <div class="drawer-section-title">表示・システム情報</div>
+        <div class="drawer-info-row">
+          <span>同期状態</span>
+          <span class="drawer-badge">🟢 リアルタイム接続</span>
+        </div>
+        <div class="drawer-info-row">
+          <span>操作ガイド</span>
+          <span class="drawer-subtext">左右スワイプで期間を移動</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Floating Action Button (FAB) for Mobile Quick Add (Edit Mode Only) -->
+  <button id="floatingAddBtn" class="floating-add-fab auth-only" aria-label="予定を追加" title="予定を追加">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+      <path d="M12 5v14M5 12h14"/>
+    </svg>
+  </button>
+
+  <input type="file" id="fileImportInput" accept=".json" style="display:none;" />
+
+  <!-- Main View Area -->
+  <main class="app-main">
+
+    <!-- 1. PC Matrix View (マトリックス・タイムライン俯瞰) -->
+    <section id="pcMatrixSection" class="view-pane active">
+      <div class="pane-header">
+        <div class="status-legend-bar">
+          <div class="legend-chip status-field"><span class="legend-color"></span>現場</div>
+          <div class="legend-chip status-office"><span class="legend-color"></span>社内勤務</div>
+          <div class="legend-chip status-off"><span class="legend-color"></span>休み・有休</div>
+          <div class="legend-chip status-stay"><span class="legend-color"></span>宿泊 (5階/ホテル)</div>
+        </div>
+      </div>
+
+      <!-- Matrix Table Card -->
+      <div class="matrix-card-container">
+        <div class="matrix-scroll-wrapper" id="matrixScrollWrapper">
+          <div id="matrixTableContainer">
+            <!-- JSで動的にテーブル描画 -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. Mobile View (スマホ版) -->
+    <section id="mobileDailySection" class="view-pane">
+      <div class="mobile-simulator-layout">
+        <div class="mobile-phone-frame" id="mobileTouchArea">
+
+          <!-- Mobile Screen Header (Hero Date & Month Nav) -->
+          <div class="mobile-screen-header">
+            <div class="mobile-header-top">
+              <span class="mobile-today-chip" id="mobileHeaderBadge">TODAY</span>
+              <div class="mobile-month-nav" id="mobileMonthNav" style="display:none;">
+                <button id="mobilePrevMonthBtn" class="m-nav-btn" title="前月へ">◀</button>
+                <span id="mobileMonthLabel" class="m-nav-label">2026年8月</span>
+                <button id="mobileNextMonthBtn" class="m-nav-btn" title="翌月へ">▶</button>
+              </div>
+            </div>
+            <div class="mobile-date-hero" id="mobileDateHero">8月19日 (水)</div>
+            <div class="mobile-swipe-hint">↔ 左右スワイプで前後の期間へ連続移動</div>
+          </div>
+
+          <!-- SUB-VIEW 1: Mobile Day View (1週間・半月 選択時) -->
+          <div id="mobileSubViewDay" class="mobile-subview active">
+            <div class="mobile-date-strip-wrapper">
+              <div class="mobile-date-strip" id="mobileDateStrip">
+                <!-- JSで日付ピルを生成 -->
+              </div>
+            </div>
+
+            <div class="mobile-content-area" id="mobileCardsContainer">
+              <!-- JSでステータス別グループカードを生成 -->
+            </div>
+          </div>
+
+          <!-- SUB-VIEW 2: Mobile Month View (1ヶ月 選択時) -->
+          <div id="mobileSubViewMonth" class="mobile-subview">
+            <!-- Monthly Mini Calendar Grid -->
+            <div class="mobile-month-calendar-card">
+              <div class="month-calendar-weekdays">
+                <span class="sun">日</span>
+                <span>月</span>
+                <span>火</span>
+                <span>水</span>
+                <span>木</span>
+                <span>金</span>
+                <span class="sat">土</span>
+              </div>
+              <div class="month-calendar-grid" id="mobileMonthCalendarGrid">
+                <!-- JSでカレンダーマス目を動的生成 -->
+              </div>
+            </div>
+
+            <!-- Monthly Schedule Agenda List -->
+            <div class="mobile-month-agenda-header">
+              <span class="agenda-title" id="mobileAgendaTitle">月間全スケジュール</span>
+              <span class="agenda-count" id="mobileAgendaCount">0件</span>
+            </div>
+            <div class="mobile-content-area mobile-agenda-list" id="mobileMonthAgendaList">
+              <!-- JSで月内の日付ごとのアジェンダカードを生成 -->
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- 1. Detailed View Modal Popup (閲覧) -->
+  <div id="scheduleModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-dialog-header">
+        <span id="modalStatusPill" class="modal-status-pill status-field">現場</span>
+        <div class="modal-header-actions">
+          <button id="modalEditBtn" class="btn-modal-action btn-edit auth-only">✏️ 編集する</button>
+          <button id="modalCloseBtn" class="modal-close-trigger" aria-label="閉じる">&times;</button>
+        </div>
+      </div>
+      <div class="modal-dialog-body">
+        <h3 id="modalTitle" class="modal-event-title">案件タイトル</h3>
+        
+        <div class="modal-info-grid">
+          <div class="info-block">
+            <span class="info-label">日付</span>
+            <span id="modalDate" class="info-value">2026-08-19 (水)</span>
+          </div>
+          <div class="info-block">
+            <span class="info-label">担当メンバー</span>
+            <div id="modalMembers" class="modal-members-row"></div>
+          </div>
+        </div>
+
+        <div class="info-detail-card">
+          <div class="info-detail-label">詳細・備考</div>
+          <div id="modalDetails" class="info-detail-text">詳細情報がここに入ります。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Edit / Create Schedule Modal Popup (編集・新規登録) -->
+  <div id="editModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-edit">
+      <div class="modal-dialog-header">
+        <h3 id="editModalHeaderTitle" class="modal-dialog-title">予定の編集</h3>
+        <button id="editModalCloseBtn" class="modal-close-trigger" aria-label="閉じる">&times;</button>
+      </div>
+      <form id="scheduleEditForm" class="edit-form">
+        <input type="hidden" id="editItemId" value="">
+
+        <!-- Title -->
+        <div class="form-group">
+          <label for="formTitle" class="form-label">案件名・現場名 <span class="required">*</span></label>
+          <input type="text" id="formTitle" class="form-input" placeholder="例: 【渋谷現場】改修工事" required />
+        </div>
+
+        <!-- Date & Status Grid with Batch Option -->
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="formDate" class="form-label">日付 <span class="required">*</span></label>
+            <input type="date" id="formDate" class="form-input" required />
+          </div>
+          <div class="form-group">
+            <label for="formStatus" class="form-label">ステータス <span class="required">*</span></label>
+            <select id="formStatus" class="form-select" required>
+              <option value="現場">現場</option>
+              <option value="社内勤務">社内勤務</option>
+              <option value="休み">休み</option>
+              <option value="有休">有休</option>
+              <option value="5階泊">5階泊</option>
+              <option value="ﾎﾃﾙ泊">ﾎﾃﾙ泊</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Batch Multi-Day Creation Option -->
+        <div class="form-group batch-range-box" id="batchRangeBox">
+          <label class="checkbox-inline">
+            <input type="checkbox" id="chkBatchRange">
+            <span class="checkbox-label">🗓️ 複数日・期間に一括で追加する</span>
+          </label>
+          <div class="batch-dates-row" id="batchDatesInputs" style="display:none;">
+            <div class="date-field">
+              <span class="sub-label">終了日:</span>
+              <input type="date" id="formEndDate" class="form-input form-input-sm" />
+            </div>
+            <span class="range-hint">※ 開始日から終了日まで毎日登録されます</span>
+          </div>
+        </div>
+
+        <!-- Members Selector with Custom Input -->
+        <div class="form-group">
+          <div class="form-label-row">
+            <label class="form-label">担当メンバー (複数選択・任意追加可能)</label>
+            <button type="button" id="btnOpenMemberManagerFromForm" class="btn-text-link">👥 メンバーの編集・削除</button>
+          </div>
+          <div class="member-selector-wrapper">
+            <div class="member-selector-group" id="formMemberSelector">
+              <!-- JSで動的生成 & 選択 -->
+            </div>
+            <div class="member-add-inline">
+              <input type="text" id="customMemberInput" class="custom-member-input" placeholder="新しいメンバー名 (例: 田中, 佐)" maxlength="10" />
+              <button type="button" id="btnAddCustomMember" class="btn-add-member">＋ 追加</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Details / Memo -->
+        <div class="form-group">
+          <label for="formDetails" class="form-label">備考・特記事項・時間</label>
+          <textarea id="formDetails" class="form-textarea" rows="3" placeholder="例: 9:00〜17:00 / 渋谷区桜丘町 / トラック2台"></textarea>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="edit-form-footer">
+          <button type="button" id="btnDeleteSchedule" class="btn-danger" style="display: none;">🗑️ 削除</button>
+          <div class="edit-footer-right">
+            <button type="button" id="btnCancelEdit" class="btn-secondary">キャンセル</button>
+            <button type="submit" class="btn-primary">💾 保存する</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3. Member Management Modal (メンバー管理) -->
+  <div id="memberManagerModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-member-manager">
+      <div class="modal-dialog-header">
+        <h3 class="modal-dialog-title">👥 担当メンバー管理</h3>
+        <button id="memberManagerCloseBtn" class="modal-close-trigger" aria-label="閉じる">&times;</button>
+      </div>
+      <div class="modal-dialog-body">
+        <div class="manager-desc-box">
+          メンバーの名前変更（リネーム）や不要なメンバーの削除を行えます。<br>
+          <span class="text-hint">※名前を変更すると、登録済みの全予定内のメンバー名も自動で一括更新されます。</span>
+        </div>
+
+        <!-- Add New Member Box -->
+        <div class="manager-add-box">
+          <input type="text" id="newMemberInputModal" class="form-input" placeholder="新規メンバー名 (例: 渡辺)" maxlength="10" />
+          <button type="button" id="btnAddNewMemberModal" class="btn-primary">＋ メンバー追加</button>
+        </div>
+
+        <!-- Member List Table -->
+        <div class="member-list-container">
+          <table class="member-table">
+            <thead>
+              <tr>
+                <th style="width: 80px;">バッジ</th>
+                <th>メンバー名（編集可能）</th>
+                <th style="width: 140px; text-align: center;">操作</th>
+              </tr>
+            </thead>
+            <tbody id="memberManagerTableBody">
+              <!-- JSで動的に一覧を生成 -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Batch Operations Modal (一括操作) -->
+  <div id="batchModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-batch">
+      <div class="modal-dialog-header">
+        <h3 class="modal-dialog-title">⚡ 予定の一括操作（一括登録 / 一括削除）</h3>
+        <button id="batchModalCloseBtn" class="modal-close-trigger" aria-label="閉じる">&times;</button>
+      </div>
+      <div class="modal-dialog-body">
+        
+        <div class="batch-tabs">
+          <button class="batch-tab active" data-tab="bulk-add">➕ 期間一括登録</button>
+          <button class="batch-tab" data-tab="bulk-delete">🗑️ 条件一括削除</button>
+        </div>
+
+        <!-- Tab 1: Bulk Add -->
+        <div id="tabBulkAdd" class="batch-tab-content active">
+          <form id="bulkAddForm" class="batch-form">
+            <div class="form-row-2">
+              <div class="form-group">
+                <label class="form-label">開始日 <span class="required">*</span></label>
+                <input type="date" id="bulkStartDate" class="form-input" required />
+              </div>
+              <div class="form-group">
+                <label class="form-label">終了日 <span class="required">*</span></label>
+                <input type="date" id="bulkEndDate" class="form-input" required />
+              </div>
+            </div>
+
+            <div class="form-row-2">
+              <div class="form-group">
+                <label class="form-label">ステータス <span class="required">*</span></label>
+                <select id="bulkStatus" class="form-select" required>
+                  <option value="現場">現場</option>
+                  <option value="社内勤務">社内勤務</option>
+                  <option value="休み">休み</option>
+                  <option value="有休">有休</option>
+                  <option value="5階泊">5階泊</option>
+                  <option value="ﾎﾃﾙ泊">ﾎﾃﾙ泊</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">案件名 (現場の場合必須)</label>
+                <input type="text" id="bulkTitle" class="form-input" placeholder="例: 【品川現場】定期保守" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">担当メンバー</label>
+              <div class="member-selector-group" id="bulkMemberSelector"></div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">備考・詳細</label>
+              <input type="text" id="bulkDetails" class="form-input" placeholder="例: 終日作業 / 9:00集合" />
+            </div>
+
+            <div class="batch-action-row">
+              <button type="submit" class="btn-primary btn-block">🚀 指定期間に一括追加する</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Tab 2: Bulk Delete -->
+        <div id="tabBulkDelete" class="batch-tab-content">
+          <form id="bulkDeleteForm" class="batch-form">
+            <div class="danger-notice-box">
+              ⚠️ 条件に合致する予定を一括で削除します。この操作は取り消せません。
+            </div>
+
+            <div class="form-row-2">
+              <div class="form-group">
+                <label class="form-label">開始日 <span class="required">*</span></label>
+                <input type="date" id="deleteStartDate" class="form-input" required />
+              </div>
+              <div class="form-group">
+                <label class="form-label">終了日 <span class="required">*</span></label>
+                <input type="date" id="deleteEndDate" class="form-input" required />
+              </div>
+            </div>
+
+            <div class="form-row-2">
+              <div class="form-group">
+                <label class="form-label">ステータス指定 (任意)</label>
+                <select id="deleteStatusFilter" class="form-select">
+                  <option value="ALL">すべてのステータス</option>
+                  <option value="現場">現場のみ</option>
+                  <option value="社内勤務">社内勤務のみ</option>
+                  <option value="休み">休みのみ</option>
+                  <option value="有休">有休のみ</option>
+                  <option value="5階泊">5階泊のみ</option>
+                  <option value="ﾎﾃﾙ泊">ﾎﾃﾙ泊のみ</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">担当メンバー指定 (任意)</label>
+                <select id="deleteMemberFilter" class="form-select">
+                  <option value="ALL">全員対象</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="batch-action-row">
+              <button type="submit" class="btn-danger btn-block">⚠️ 条件に合う予定を一括削除する</button>
+            </div>
+          </form>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. Admin Password Login Modal (管理者認証) -->
+  <div id="adminLoginModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-dialog" style="max-width: 400px;">
+      <div class="modal-dialog-header">
+        <h3 class="modal-dialog-title">🔒 管理者ログイン（編集モード解除）</h3>
+        <button id="adminLoginCloseBtn" class="modal-close-trigger" aria-label="閉じる">&times;</button>
+      </div>
+      <form id="adminLoginForm" class="edit-form">
+        <div class="form-group">
+          <label for="adminPasswordInput" class="form-label">管理者パスワード</label>
+          <input type="password" id="adminPasswordInput" class="form-input" placeholder="パスワードを入力..." required autofocus />
+          <span class="form-sublabel">※ 初期パスワード: admin（firebase-config.jsで変更可能）</span>
+        </div>
+        <div id="adminLoginError" class="auth-error-msg" style="display: none;">パスワードが正しくありません</div>
+        <div class="edit-form-footer">
+          <button type="button" id="btnCancelAdminLogin" class="btn-secondary">キャンセル</button>
+          <button type="submit" class="btn-primary">🔓 ロック解除</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
