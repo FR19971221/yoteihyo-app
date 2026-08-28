@@ -8,7 +8,7 @@
  * 5. 「今日へ」ボタンのリアルタイムPC日時 (Today) リンク
  * 6. 複数日タスクの段(レーン)一致・連結帯 (コネクテッドバー) 表示 & 個別日編集の完全両立
  * 7. スマホ向けUI集約 (ハンバーガードロワーメニュー & 右下固定FABボタン)
- * 8. スワイプ & オーバースクロールによる「期間の連続・無限移動」
+ * 8. 連続・スムーズな無制限横スクロール表示（ページネーションの廃止）
  */
 
 const STATUS_LIST = [
@@ -17,7 +17,7 @@ const STATUS_LIST = [
   "休み",
   "有休",
   "5階泊",
-  "ﾎﾃﾙ泊"
+  "ﾎﾃル泊"
 ];
 
 const INITIAL_MEMBERS = ["M", "R", "Z", "吉", "黒", "佐藤"];
@@ -31,7 +31,7 @@ const INITIAL_DEMO_SCHEDULES = [
   { id: "s5", date: "2026-08-19", status: "休み", title: "休み", details: "定休日", members: ["佐藤"] },
   { id: "s6", date: "2026-08-20", status: "現場", title: "【品川現場】新設工事 1日目", details: "8:30〜 / 大型機材搬入", members: ["M", "吉", "黒"] },
   { id: "s7", date: "2026-08-20", status: "社内勤務", title: "社内勤務", details: "10:00〜12:00 ミーティング", members: ["R", "Z"] },
-  { id: "s8", date: "2026-08-20", status: "ﾎﾃﾙ泊", title: "ﾎﾃﾙ泊", details: "品川駅前宿泊", members: ["吉"] }
+  { id: "s8", date: "2026-08-20", status: "ﾎﾃル泊", title: "ﾎﾃル泊", details: "品川駅前宿泊", members: ["吉"] }
 ];
 
 const STORAGE_KEY = "tokyo_schedules_master_data_v6";
@@ -42,20 +42,22 @@ class ScheduleApp {
   constructor() {
     this.schedules = [];
     this.allMembers = [...INITIAL_MEMBERS];
-    
+
     // リアルタイムPC現在日時（Today）を基準日に設定
     this.realToday = this.getRealTodayYmd();
     this.currentDate = this.realToday;
     this.currentYearMonth = this.currentDate.substring(0, 7);
-    
+
     this.selectedMember = "ALL";
     this.searchKeyword = "";
-    this.currentView = "pc";
+
+    // 画面幅が768px以下の場合は自動的にスマホ表示に固定
+    this.currentView = window.innerWidth <= 768 ? "mobile" : "pc";
     this.mobileSubMode = "day"; // 'day' or 'month'
-    this.viewSpan = "week"; // 'week' (7日), 'halfmonth' (15日), 'month' (月毎)
+    this.viewSpan = "week"; // 'week', 'halfmonth', 'month'
     this.isAdmin = false;
     this.activeModalItemId = null;
-    
+
     this.db = null;
     this.isCloudConnected = false;
     this.unsubscribeFirestore = null;
@@ -74,9 +76,15 @@ class ScheduleApp {
     this.bindEvents();
     this.initSwipeAndScrollGestures();
     this.initFirebaseAndLoadData();
+
+    // 画面リサイズ時にスマホなら自動的にビューを切り替え
+    window.addEventListener("resize", () => {
+      if (window.innerWidth <= 768 && this.currentView !== "mobile") {
+        this.switchView("mobile");
+      }
+    });
   }
 
-  // クライアントPCの現在日付（Today）を YYYY-MM-DD で取得
   getRealTodayYmd() {
     const now = new Date();
     const y = now.getFullYear();
@@ -116,35 +124,28 @@ class ScheduleApp {
     }
   }
 
-  // ================= 無制限・動的な日付範囲生成 =================
+  // ================= 横スクロールでなめらかに繋がる広範囲の日付生成 =================
   generateDateRange(centerDateStr) {
     const [y, m, d] = centerDateStr.split('-').map(Number);
     const center = new Date(y, m - 1, d);
     const range = [];
 
-    if (this.viewSpan === "week") {
-      // 1週間（7日間: 基準日を中心とする -2日〜+4日）
-      for (let i = -2; i <= 4; i++) {
-        const target = new Date(center);
-        target.setDate(target.getDate() + i);
-        range.push(this.formatYmd(target));
-      }
-    } else if (this.viewSpan === "halfmonth") {
-      // 半月（15日間: 基準日前後 -7日〜+7日）
-      for (let i = -7; i <= 7; i++) {
-        const target = new Date(center);
-        target.setDate(target.getDate() + i);
-        range.push(this.formatYmd(target));
-      }
+    // 一気に画面が変わるのを防ぎ、前後を含めた連続表示を可能にするため広い範囲を生成
+    let pastDays = 14;
+    let futureDays = 30;
+
+    if (this.viewSpan === "halfmonth") {
+      pastDays = 20;
+      futureDays = 40;
     } else if (this.viewSpan === "month") {
-      // 1ヶ月（当月の1日〜末日）
-      const year = center.getFullYear();
-      const month = center.getMonth();
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
-      for (let day = 1; day <= daysInMonth; day++) {
-        const target = new Date(year, month, day);
-        range.push(this.formatYmd(target));
-      }
+      pastDays = 30;
+      futureDays = 60;
+    }
+
+    for (let i = -pastDays; i <= futureDays; i++) {
+      const target = new Date(center);
+      target.setDate(target.getDate() + i);
+      range.push(this.formatYmd(target));
     }
 
     this.dateRange = range;
@@ -173,7 +174,7 @@ class ScheduleApp {
     if (st.includes("有休") || st.includes("有給")) return "有休";
     if (st.includes("休")) return "休み";
     if (st.includes("5階") || st.includes("５階")) return "5階泊";
-    if (st.includes("ホテル") || st.includes("ﾎﾃﾙ") || st.includes("宿泊") || st.includes("泊")) return "ﾎﾃﾙ泊";
+    if (st.includes("ホテル") || st.includes("ﾎﾃル") || st.includes("宿泊") || st.includes("泊")) return "ﾎﾃル泊";
     return "現場";
   }
 
@@ -311,10 +312,10 @@ class ScheduleApp {
   }
 
   bindEvents() {
-    this.btnPcView.addEventListener("click", () => this.switchView("pc"));
-    this.btnMobileView.addEventListener("click", () => this.switchView("mobile"));
+    if (this.btnPcView) this.btnPcView.addEventListener("click", () => this.switchView("pc"));
+    if (this.btnMobileView) this.btnMobileView.addEventListener("click", () => this.switchView("mobile"));
 
-    // 期間スパン切り替えタブ (PC & スマホ共通連動)
+    // 期間スパン切り替えタブ
     this.spanTabs.forEach(tab => {
       tab.addEventListener("click", () => {
         const span = tab.dataset.span;
@@ -323,31 +324,41 @@ class ScheduleApp {
     });
 
     // Mobile Drawer Open / Close
-    this.btnHamburgerMenu.addEventListener("click", () => this.openMobileDrawer());
-    this.btnDrawerClose.addEventListener("click", () => this.closeMobileDrawer());
-    this.mobileDrawerOverlay.addEventListener("click", () => this.closeMobileDrawer());
+    if (this.btnHamburgerMenu) this.btnHamburgerMenu.addEventListener("click", () => this.openMobileDrawer());
+    if (this.btnDrawerClose) this.btnDrawerClose.addEventListener("click", () => this.closeMobileDrawer());
+    if (this.mobileDrawerOverlay) this.mobileDrawerOverlay.addEventListener("click", () => this.closeMobileDrawer());
 
     // Drawer Menu Items
-    this.drawerBtnNewSchedule.addEventListener("click", () => {
-      this.closeMobileDrawer();
-      if (this.isAdmin) this.openCreateModal(this.currentDate, "現場");
-    });
-    this.drawerBtnBatchActions.addEventListener("click", () => {
-      this.closeMobileDrawer();
-      if (this.isAdmin) this.openBatchModal();
-    });
-    this.drawerBtnManageMembers.addEventListener("click", () => {
-      this.closeMobileDrawer();
-      if (this.isAdmin) this.openMemberManagerModal();
-    });
-    this.drawerBtnExportData.addEventListener("click", () => {
-      this.closeMobileDrawer();
-      this.exportDataToFile();
-    });
-    this.drawerBtnImportData.addEventListener("click", () => {
-      this.closeMobileDrawer();
-      this.fileImportInput.click();
-    });
+    if (this.drawerBtnNewSchedule) {
+      this.drawerBtnNewSchedule.addEventListener("click", () => {
+        this.closeMobileDrawer();
+        if (this.isAdmin) this.openCreateModal(this.currentDate, "現場");
+      });
+    }
+    if (this.drawerBtnBatchActions) {
+      this.drawerBtnBatchActions.addEventListener("click", () => {
+        this.closeMobileDrawer();
+        if (this.isAdmin) this.openBatchModal();
+      });
+    }
+    if (this.drawerBtnManageMembers) {
+      this.drawerBtnManageMembers.addEventListener("click", () => {
+        this.closeMobileDrawer();
+        if (this.isAdmin) this.openMemberManagerModal();
+      });
+    }
+    if (this.drawerBtnExportData) {
+      this.drawerBtnExportData.addEventListener("click", () => {
+        this.closeMobileDrawer();
+        this.exportDataToFile();
+      });
+    }
+    if (this.drawerBtnImportData) {
+      this.drawerBtnImportData.addEventListener("click", () => {
+        this.closeMobileDrawer();
+        this.fileImportInput.click();
+      });
+    }
 
     // Floating Action Button (FAB)
     if (this.floatingAddBtn) {
@@ -357,115 +368,145 @@ class ScheduleApp {
     }
 
     // Admin Auth Actions
-    this.btnAdminLogin.addEventListener("click", () => this.openAdminLoginModal());
-    this.btnAdminLogout.addEventListener("click", () => {
-      if (confirm("閲覧専用モードに戻りますか？")) {
-        this.setAdminMode(false);
-      }
-    });
+    if (this.btnAdminLogin) this.btnAdminLogin.addEventListener("click", () => this.openAdminLoginModal());
+    if (this.btnAdminLogout) {
+      this.btnAdminLogout.addEventListener("click", () => {
+        if (confirm("閲覧専用モードに戻りますか？")) {
+          this.setAdminMode(false);
+        }
+      });
+    }
 
-    this.adminLoginCloseBtn.addEventListener("click", () => this.closeAdminLoginModal());
-    this.btnCancelAdminLogin.addEventListener("click", () => this.closeAdminLoginModal());
-    this.adminLoginModal.addEventListener("click", (e) => {
-      if (e.target === this.adminLoginModal) this.closeAdminLoginModal();
-    });
+    if (this.adminLoginCloseBtn) this.adminLoginCloseBtn.addEventListener("click", () => this.closeAdminLoginModal());
+    if (this.btnCancelAdminLogin) this.btnCancelAdminLogin.addEventListener("click", () => this.closeAdminLoginModal());
+    if (this.adminLoginModal) {
+      this.adminLoginModal.addEventListener("click", (e) => {
+        if (e.target === this.adminLoginModal) this.closeAdminLoginModal();
+      });
+    }
 
-    this.adminLoginForm.addEventListener("submit", (e) => {
-      e.preventDefault();
-      const inputPass = this.adminPasswordInput.value;
-      const targetPass = (window.ADMIN_PASSWORD !== undefined) ? window.ADMIN_PASSWORD : "admin";
-      if (inputPass === targetPass) {
-        this.closeAdminLoginModal();
-        this.setAdminMode(true);
-        alert("🔓 管理者認証に成功しました！編集モードがアンロックされました。");
-      } else {
-        this.adminLoginError.style.display = "block";
-      }
-    });
+    if (this.adminLoginForm) {
+      this.adminLoginForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const inputPass = this.adminPasswordInput.value;
+        const targetPass = (window.ADMIN_PASSWORD !== undefined) ? window.ADMIN_PASSWORD : "admin";
+        if (inputPass === targetPass) {
+          this.closeAdminLoginModal();
+          this.setAdminMode(true);
+          alert("🔓 管理者認証に成功しました！編集モードがアンロックされました。");
+        } else {
+          this.adminLoginError.style.display = "block";
+        }
+      });
+    }
 
-    this.mobilePrevMonthBtn.addEventListener("click", () => this.stepMonth(-1));
-    this.mobileNextMonthBtn.addEventListener("click", () => this.stepMonth(1));
+    if (this.mobilePrevMonthBtn) this.mobilePrevMonthBtn.addEventListener("click", () => this.stepMonth(-1));
+    if (this.mobileNextMonthBtn) this.mobileNextMonthBtn.addEventListener("click", () => this.stepMonth(1));
 
-    // 「今日へ」ボタン：PCのリアルタイム現在日付にジャンプ
-    this.todayBtn.addEventListener("click", () => {
-      this.realToday = this.getRealTodayYmd();
-      this.currentDate = this.realToday;
-      this.generateDateRange(this.currentDate);
-      this.updateHeaderDates();
-      this.render();
-    });
-
-    // 永久・無制限の日付送り
-    this.prevDateBtn.addEventListener("click", () => this.stepDateBySpan(-1));
-    this.nextDateBtn.addEventListener("click", () => this.stepDateBySpan(1));
-
-    this.dateDisplayBtn.addEventListener("click", () => {
-      this.hiddenDatePicker.showPicker ? this.hiddenDatePicker.showPicker() : this.hiddenDatePicker.click();
-    });
-
-    this.hiddenDatePicker.addEventListener("change", (e) => {
-      if (e.target.value) {
-        this.currentDate = e.target.value;
+    // 「今日へ」ボタン
+    if (this.todayBtn) {
+      this.todayBtn.addEventListener("click", () => {
+        this.realToday = this.getRealTodayYmd();
+        this.currentDate = this.realToday;
         this.generateDateRange(this.currentDate);
         this.updateHeaderDates();
         this.render();
-      }
-    });
+        this.scrollToCurrentDate();
+      });
+    }
 
-    this.memberFilterList.addEventListener("click", (e) => {
-      const pill = e.target.closest(".member-pill");
-      if (!pill) return;
-      document.querySelectorAll(".member-pill").forEach(p => p.classList.remove("active"));
-      pill.classList.add("active");
-      this.selectedMember = pill.dataset.member;
-      this.render();
-    });
+    // 日付移動ボタン
+    if (this.prevDateBtn) this.prevDateBtn.addEventListener("click", () => this.stepDateBySpan(-1));
+    if (this.nextDateBtn) this.nextDateBtn.addEventListener("click", () => this.stepDateBySpan(1));
 
-    this.searchInput.addEventListener("input", (e) => {
-      this.searchKeyword = e.target.value.toLowerCase().trim();
-      this.searchClearBtn.style.display = this.searchKeyword ? "block" : "none";
-      this.render();
-    });
+    if (this.dateDisplayBtn) {
+      this.dateDisplayBtn.addEventListener("click", () => {
+        this.hiddenDatePicker.showPicker ? this.hiddenDatePicker.showPicker() : this.hiddenDatePicker.click();
+      });
+    }
 
-    this.searchClearBtn.addEventListener("click", () => {
-      this.searchInput.value = "";
-      this.searchKeyword = "";
-      this.searchClearBtn.style.display = "none";
-      this.render();
-    });
+    if (this.hiddenDatePicker) {
+      this.hiddenDatePicker.addEventListener("change", (e) => {
+        if (e.target.value) {
+          this.currentDate = e.target.value;
+          this.generateDateRange(this.currentDate);
+          this.updateHeaderDates();
+          this.render();
+          this.scrollToCurrentDate();
+        }
+      });
+    }
 
-    this.btnNewSchedule.addEventListener("click", () => {
-      if (!this.isAdmin) return;
-      this.openCreateModal(this.currentDate, "現場");
-    });
+    if (this.memberFilterList) {
+      this.memberFilterList.addEventListener("click", (e) => {
+        const pill = e.target.closest(".member-pill");
+        if (!pill) return;
+        document.querySelectorAll(".member-pill").forEach(p => p.classList.remove("active"));
+        pill.classList.add("active");
+        this.selectedMember = pill.dataset.member;
+        this.render();
+      });
+    }
 
-    this.btnExportData.addEventListener("click", () => this.exportDataToFile());
-    this.btnImportData.addEventListener("click", () => this.fileImportInput.click());
-    this.fileImportInput.addEventListener("change", (e) => this.handleFileImport(e));
+    if (this.searchInput) {
+      this.searchInput.addEventListener("input", (e) => {
+        this.searchKeyword = e.target.value.toLowerCase().trim();
+        this.searchClearBtn.style.display = this.searchKeyword ? "block" : "none";
+        this.render();
+      });
+    }
 
-    this.btnManageMembers.addEventListener("click", () => this.openMemberManagerModal());
-    this.btnOpenMemberManagerFromForm.addEventListener("click", () => {
-      this.closeEditModal();
-      this.openMemberManagerModal();
-    });
-    this.memberManagerCloseBtn.addEventListener("click", () => this.closeMemberManagerModal());
-    this.memberManagerModal.addEventListener("click", (e) => {
-      if (e.target === this.memberManagerModal) this.closeMemberManagerModal();
-    });
+    if (this.searchClearBtn) {
+      this.searchClearBtn.addEventListener("click", () => {
+        this.searchInput.value = "";
+        this.searchKeyword = "";
+        this.searchClearBtn.style.display = "none";
+        this.render();
+      });
+    }
 
-    this.btnAddNewMemberModal.addEventListener("click", () => this.addMemberFromModal());
-    this.newMemberInputModal.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        this.addMemberFromModal();
-      }
-    });
+    if (this.btnNewSchedule) {
+      this.btnNewSchedule.addEventListener("click", () => {
+        if (!this.isAdmin) return;
+        this.openCreateModal(this.currentDate, "現場");
+      });
+    }
 
-    this.btnBatchActions.addEventListener("click", () => this.openBatchModal());
-    this.batchModalCloseBtn.addEventListener("click", () => this.closeBatchModal());
-    this.batchModal.addEventListener("click", (e) => {
-      if (e.target === this.batchModal) this.closeBatchModal();
-    });
+    if (this.btnExportData) this.btnExportData.addEventListener("click", () => this.exportDataToFile());
+    if (this.btnImportData) this.btnImportData.addEventListener("click", () => this.fileImportInput.click());
+    if (this.fileImportInput) this.fileImportInput.addEventListener("change", (e) => this.handleFileImport(e));
+
+    if (this.btnManageMembers) this.btnManageMembers.addEventListener("click", () => this.openMemberManagerModal());
+    if (this.btnOpenMemberManagerFromForm) {
+      this.btnOpenMemberManagerFromForm.addEventListener("click", () => {
+        this.closeEditModal();
+        this.openMemberManagerModal();
+      });
+    }
+    if (this.memberManagerCloseBtn) this.memberManagerCloseBtn.addEventListener("click", () => this.closeMemberManagerModal());
+    if (this.memberManagerModal) {
+      this.memberManagerModal.addEventListener("click", (e) => {
+        if (e.target === this.memberManagerModal) this.closeMemberManagerModal();
+      });
+    }
+
+    if (this.btnAddNewMemberModal) this.btnAddNewMemberModal.addEventListener("click", () => this.addMemberFromModal());
+    if (this.newMemberInputModal) {
+      this.newMemberInputModal.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          this.addMemberFromModal();
+        }
+      });
+    }
+
+    if (this.btnBatchActions) this.btnBatchActions.addEventListener("click", () => this.openBatchModal());
+    if (this.batchModalCloseBtn) this.batchModalCloseBtn.addEventListener("click", () => this.closeBatchModal());
+    if (this.batchModal) {
+      this.batchModal.addEventListener("click", (e) => {
+        if (e.target === this.batchModal) this.closeBatchModal();
+      });
+    }
 
     document.querySelectorAll(".batch-tab").forEach(tab => {
       tab.addEventListener("click", () => {
@@ -477,69 +518,89 @@ class ScheduleApp {
       });
     });
 
-    this.modalCloseBtn.addEventListener("click", () => this.closeDetailModal());
-    this.detailModal.addEventListener("click", (e) => {
-      if (e.target === this.detailModal) this.closeDetailModal();
-    });
+    if (this.modalCloseBtn) this.modalCloseBtn.addEventListener("click", () => this.closeDetailModal());
+    if (this.detailModal) {
+      this.detailModal.addEventListener("click", (e) => {
+        if (e.target === this.detailModal) this.closeDetailModal();
+      });
+    }
 
-    this.modalEditBtn.addEventListener("click", () => {
-      if (this.activeModalItemId) {
-        if (!this.isAdmin) {
-          alert("編集するには管理者ログインが必要です。");
-          return;
+    if (this.modalEditBtn) {
+      this.modalEditBtn.addEventListener("click", () => {
+        if (this.activeModalItemId) {
+          if (!this.isAdmin) {
+            alert("編集するには管理者ログインが必要です。");
+            return;
+          }
+          this.closeDetailModal();
+          this.openEditModal(this.activeModalItemId);
         }
-        this.closeDetailModal();
-        this.openEditModal(this.activeModalItemId);
-      }
-    });
+      });
+    }
 
-    this.editModalCloseBtn.addEventListener("click", () => this.closeEditModal());
-    this.btnCancelEdit.addEventListener("click", () => this.closeEditModal());
-    this.editModal.addEventListener("click", (e) => {
-      if (e.target === this.editModal) this.closeEditModal();
-    });
+    if (this.editModalCloseBtn) this.editModalCloseBtn.addEventListener("click", () => this.closeEditModal());
+    if (this.btnCancelEdit) this.btnCancelEdit.addEventListener("click", () => this.closeEditModal());
+    if (this.editModal) {
+      this.editModal.addEventListener("click", (e) => {
+        if (e.target === this.editModal) this.closeEditModal();
+      });
+    }
 
-    this.btnAddCustomMember.addEventListener("click", () => this.addCustomMemberFromInput());
-    this.customMemberInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
+    if (this.btnAddCustomMember) this.btnAddCustomMember.addEventListener("click", () => this.addCustomMemberFromInput());
+    if (this.customMemberInput) {
+      this.customMemberInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          this.addCustomMemberFromInput();
+        }
+      });
+    }
+
+    if (this.formStatus) {
+      this.formStatus.addEventListener("change", () => {
+        this.adjustFormForStatus(this.formStatus.value);
+      });
+    }
+
+    if (this.chkBatchRange) {
+      this.chkBatchRange.addEventListener("change", () => {
+        this.batchDatesInputs.style.display = this.chkBatchRange.checked ? "flex" : "none";
+        if (this.chkBatchRange.checked && !this.formEndDate.value) {
+          this.formEndDate.value = this.formDate.value;
+        }
+      });
+    }
+
+    if (this.scheduleEditForm) {
+      this.scheduleEditForm.addEventListener("submit", (e) => {
         e.preventDefault();
-        this.addCustomMemberFromInput();
-      }
-    });
+        this.saveScheduleForm();
+      });
+    }
 
-    this.formStatus.addEventListener("change", () => {
-      this.adjustFormForStatus(this.formStatus.value);
-    });
+    if (this.btnDeleteSchedule) {
+      this.btnDeleteSchedule.addEventListener("click", () => {
+        const id = this.editItemId.value;
+        if (id && confirm("この予定を削除してもよろしいですか？")) {
+          this.deleteSchedule(id);
+          this.closeEditModal();
+        }
+      });
+    }
 
-    this.chkBatchRange.addEventListener("change", () => {
-      this.batchDatesInputs.style.display = this.chkBatchRange.checked ? "flex" : "none";
-      if (this.chkBatchRange.checked && !this.formEndDate.value) {
-        this.formEndDate.value = this.formDate.value;
-      }
-    });
+    if (this.bulkAddForm) {
+      this.bulkAddForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        this.handleBulkAdd();
+      });
+    }
 
-    this.scheduleEditForm.addEventListener("submit", (e) => {
-      e.preventDefault();
-      this.saveScheduleForm();
-    });
-
-    this.btnDeleteSchedule.addEventListener("click", () => {
-      const id = this.editItemId.value;
-      if (id && confirm("この予定を削除してもよろしいですか？")) {
-        this.deleteSchedule(id);
-        this.closeEditModal();
-      }
-    });
-
-    this.bulkAddForm.addEventListener("submit", (e) => {
-      e.preventDefault();
-      this.handleBulkAdd();
-    });
-
-    this.bulkDeleteForm.addEventListener("submit", (e) => {
-      e.preventDefault();
-      this.handleBulkDelete();
-    });
+    if (this.bulkDeleteForm) {
+      this.bulkDeleteForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        this.handleBulkDelete();
+      });
+    }
 
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
@@ -553,9 +614,8 @@ class ScheduleApp {
     });
   }
 
-  // ================= スワイプ & スクロールによる期間連続移動 =================
+  // ================= スワイプ & 自然な横スクロール制御 =================
   initSwipeAndScrollGestures() {
-    // 1. スマホ向けタッチスワイプ（左右スワイプで前後の期間へ連続移動）
     const touchTarget = this.mobileTouchArea || document.body;
 
     touchTarget.addEventListener('touchstart', (e) => {
@@ -568,48 +628,18 @@ class ScheduleApp {
       this.touchEndY = e.changedTouches[0].screenY;
       this.handleSwipeGesture();
     }, { passive: true });
-
-    // 2. PCマトリックスのホイール/オーバースクロールによる期間送り
-    if (this.matrixScrollWrapper) {
-      let wheelDebounce = null;
-      this.matrixScrollWrapper.addEventListener('wheel', (e) => {
-        // 横スクロール量が大きく、左右端に達したとき
-        const atLeft = (this.matrixScrollWrapper.scrollLeft <= 0);
-        const atRight = (this.matrixScrollWrapper.scrollLeft + this.matrixScrollWrapper.clientWidth >= this.matrixScrollWrapper.scrollWidth - 5);
-
-        if (Math.abs(e.deltaX) > 40) {
-          if (e.deltaX > 0 && atRight) {
-            // 右端でさらに右へ
-            if (!this.isSwipeThrottled) {
-              this.isSwipeThrottled = true;
-              this.stepDateBySpan(1);
-              setTimeout(() => { this.isSwipeThrottled = false; }, 500);
-            }
-          } else if (e.deltaX < 0 && atLeft) {
-            // 左端でさらに左へ
-            if (!this.isSwipeThrottled) {
-              this.isSwipeThrottled = true;
-              this.stepDateBySpan(-1);
-              setTimeout(() => { this.isSwipeThrottled = false; }, 500);
-            }
-          }
-        }
-      }, { passive: true });
-    }
   }
 
   handleSwipeGesture() {
     const diffX = this.touchEndX - this.touchStartX;
     const diffY = this.touchEndY - this.touchStartY;
 
-    // 水平方向のスワイプ判定（縦スクロールと誤爆しないよう |diffX| > |diffY| * 1.5 かつ 閾値 50px）
     if (Math.abs(diffX) > Math.abs(diffY) * 1.4 && Math.abs(diffX) > 50) {
       if (this.isSwipeThrottled) return;
       this.isSwipeThrottled = true;
 
       const container = this.mobileCardsContainer || this.mobileSubViewMonth;
       if (diffX < 0) {
-        // 左スワイプ => 次の期間へ
         if (container) {
           container.classList.remove('swipe-anim-left', 'swipe-anim-right');
           void container.offsetWidth;
@@ -617,7 +647,6 @@ class ScheduleApp {
         }
         this.stepDateBySpan(1);
       } else {
-        // 右スワイプ => 前の期間へ
         if (container) {
           container.classList.remove('swipe-anim-left', 'swipe-anim-right');
           void container.offsetWidth;
@@ -632,7 +661,19 @@ class ScheduleApp {
     }
   }
 
-  // ================= ドロワーメニュー =================
+  // 選択した日付へスムーズにスクロール移動
+  scrollToCurrentDate() {
+    if (!this.matrixScrollWrapper) return;
+    const targetTh = this.matrixTableContainer.querySelector(`th.selected-col, th.today-col`);
+    if (targetTh) {
+      const scrollLeft = targetTh.offsetLeft - 150;
+      this.matrixScrollWrapper.scrollTo({
+        left: scrollLeft,
+        behavior: 'smooth'
+      });
+    }
+  }
+
   openMobileDrawer() {
     this.mobileNavDrawer.classList.add("active");
     this.mobileDrawerOverlay.classList.add("active");
@@ -643,7 +684,6 @@ class ScheduleApp {
     this.mobileDrawerOverlay.classList.remove("active");
   }
 
-  // ================= 期間スパン切り替え (PC & スマホ統合) =================
   switchSpan(span) {
     this.spanTabs.forEach(t => t.classList.toggle("active", t.dataset.span === span));
     this.viewSpan = span;
@@ -680,7 +720,6 @@ class ScheduleApp {
     this.adminLoginModal.setAttribute("aria-hidden", "true");
   }
 
-  // 永久・無制限の日付前後送り
   stepDateBySpan(direction) {
     const [y, m, d] = this.currentDate.split('-').map(Number);
     const dt = new Date(y, m - 1, d);
@@ -696,9 +735,9 @@ class ScheduleApp {
     this.generateDateRange(this.currentDate);
     this.updateHeaderDates();
     this.render();
+    this.scrollToCurrentDate();
   }
 
-  // ================= Firebase リアルタイム同期 & データロード =================
   async initFirebaseAndLoadData() {
     let firebaseReady = false;
     if (window.firebase && window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.apiKey && window.FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY") {
@@ -714,9 +753,7 @@ class ScheduleApp {
           this.syncIndicator.textContent = "🟢 クラウド同期中";
           this.syncIndicator.className = "sync-indicator";
         }
-        console.log("🔥 Firebase Firestore リアルタイム同期が有効化されました。");
 
-        // 1. メンバーリストのリアルタイム監視
         this.db.collection("metadata").doc("members").onSnapshot(doc => {
           if (doc.exists && Array.isArray(doc.data().list)) {
             this.allMembers = Array.from(new Set([...INITIAL_MEMBERS, ...doc.data().list]));
@@ -724,7 +761,6 @@ class ScheduleApp {
           }
         });
 
-        // 2. スケジュールのリアルタイム監視 (onSnapshot)
         this.unsubscribeFirestore = this.db.collection("schedules").onSnapshot(snapshot => {
           const cloudItems = [];
           snapshot.forEach(doc => {
@@ -752,7 +788,6 @@ class ScheduleApp {
       if (this.syncIndicator) {
         this.syncIndicator.textContent = "🟡 ローカルモード (Firebase未設定)";
         this.syncIndicator.className = "sync-indicator sync-local";
-        this.syncIndicator.title = "firebase-config.js にAPIキーを設定するとクラウド同期が有効になります";
       }
       this.loadLocalData();
     }
@@ -766,7 +801,7 @@ class ScheduleApp {
         if (Array.isArray(parsedM)) {
           this.allMembers = Array.from(new Set([...INITIAL_MEMBERS, ...parsedM]));
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     const local = localStorage.getItem(STORAGE_KEY);
@@ -784,7 +819,7 @@ class ScheduleApp {
           this.render();
           return;
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     try {
@@ -814,7 +849,6 @@ class ScheduleApp {
     this.render();
   }
 
-  // ================= データの保存 =================
   async saveScheduleItem(item) {
     if (this.isCloudConnected && this.db) {
       try {
@@ -876,13 +910,13 @@ class ScheduleApp {
   saveToStorage() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(this.schedules));
-    } catch (e) {}
+    } catch (e) { }
   }
 
   saveMembersToStorage() {
     try {
       localStorage.setItem(MEMBERS_STORAGE_KEY, JSON.stringify(this.allMembers));
-    } catch (e) {}
+    } catch (e) { }
   }
 
   collectMembersFromSchedules() {
@@ -897,7 +931,6 @@ class ScheduleApp {
     });
   }
 
-  // ================= 一括操作 =================
   async handleBulkAdd() {
     const startStr = this.bulkStartDate.value;
     const endStr = this.bulkEndDate.value;
@@ -928,7 +961,7 @@ class ScheduleApp {
     });
 
     const dates = this.getDateRangeArray(startStr, endStr);
-    
+
     if (this.isCloudConnected && this.db) {
       const batch = this.db.batch();
       dates.forEach(d => {
@@ -1033,7 +1066,6 @@ class ScheduleApp {
     return dates;
   }
 
-  // ================= フォーム保存 =================
   async saveScheduleForm() {
     const id = this.editItemId.value || ("sch_" + Date.now() + "_" + Math.random().toString(36).substr(2, 4));
     let title = this.formTitle.value.trim();
@@ -1118,7 +1150,6 @@ class ScheduleApp {
     await this.deleteScheduleItem(id);
   }
 
-  // ================= メンバー管理 =================
   openMemberManagerModal() {
     this.renderMemberManagerTable();
     this.newMemberInputModal.value = "";
@@ -1250,7 +1281,6 @@ class ScheduleApp {
     }
   }
 
-  // ================= メンバー入力 =================
   addCustomMemberFromInput() {
     const rawVal = this.customMemberInput.value.trim();
     if (!rawVal) return;
@@ -1264,7 +1294,7 @@ class ScheduleApp {
 
     this.customMemberInput.value = "";
     this.saveMembersList();
-    
+
     const currentChecked = this.getSelectedFormMembers();
     tokens.forEach(token => {
       if (!currentChecked.includes(token)) currentChecked.push(token);
@@ -1321,7 +1351,6 @@ class ScheduleApp {
     }
   }
 
-  // ================= データのエクスポート & インポート =================
   exportDataToFile() {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(this.schedules, null, 2));
     const downloadAnchor = document.createElement('a');
@@ -1393,15 +1422,15 @@ class ScheduleApp {
   switchView(view) {
     this.currentView = view;
     if (view === "pc") {
-      this.btnPcView.classList.add("active");
-      this.btnMobileView.classList.remove("active");
-      this.pcSection.classList.add("active");
-      this.mobileSection.classList.remove("active");
+      if (this.btnPcView) this.btnPcView.classList.add("active");
+      if (this.btnMobileView) this.btnMobileView.classList.remove("active");
+      if (this.pcSection) this.pcSection.classList.add("active");
+      if (this.mobileSection) this.mobileSection.classList.remove("active");
     } else {
-      this.btnMobileView.classList.add("active");
-      this.btnPcView.classList.remove("active");
-      this.mobileSection.classList.add("active");
-      this.pcSection.classList.remove("active");
+      if (this.btnMobileView) this.btnMobileView.classList.add("active");
+      if (this.btnPcView) this.btnPcView.classList.remove("active");
+      if (this.mobileSection) this.mobileSection.classList.add("active");
+      if (this.pcSection) this.pcSection.classList.remove("active");
     }
     this.render();
   }
@@ -1436,7 +1465,7 @@ class ScheduleApp {
       this.hiddenDatePicker.value = this.currentDate;
     }
     const f = this.formatShortDate(this.currentDate);
-    
+
     if (this.mobileSubMode === "day") {
       if (this.mobileDateHero) this.mobileDateHero.textContent = `${f.monthDay} (${f.weekday})`;
     } else {
@@ -1475,7 +1504,6 @@ class ScheduleApp {
     }
   }
 
-  // ================= 複数日タスクの段(レーン)一致・連結計算 =================
   calculateStatusTracks(statusItems) {
     const sorted = [...statusItems].sort((a, b) => (a.date > b.date ? 1 : -1));
     const chains = [];
@@ -1483,7 +1511,7 @@ class ScheduleApp {
 
     sorted.forEach(item => {
       if (visited.has(item.id)) return;
-      
+
       const chain = [item];
       visited.add(item.id);
 
@@ -1509,7 +1537,7 @@ class ScheduleApp {
 
     chains.forEach(chain => {
       const chainDates = chain.map(it => it.date);
-      
+
       let assignedTrack = -1;
       for (let t = 0; t < tracksOccupiedDates.length; t++) {
         const hasCollision = chainDates.some(d => tracksOccupiedDates[t].has(d));
@@ -1535,7 +1563,8 @@ class ScheduleApp {
   // ================= PC Matrix View =================
   renderPcMatrix() {
     const filtered = this.filterList(this.schedules);
-    const minWidth = (this.viewSpan === "month") ? "2400px" : (this.viewSpan === "halfmonth") ? "1600px" : "1000px";
+    const colWidth = 140;
+    const minWidth = `${this.dateRange.length * colWidth + 140}px`;
 
     let html = `<table class="matrix-grid-table" style="min-width: ${minWidth};"><thead><tr><th class="matrix-status-header">ステータス / 日付</th>`;
 
@@ -1544,7 +1573,7 @@ class ScheduleApp {
       const isSelected = (dStr === this.currentDate);
       const isToday = (dStr === this.realToday);
       const colClass = isSelected ? "selected-col" : (isToday ? "today-col" : "");
-      
+
       html += `
         <th class="${colClass} ${f.isWeekend ? 'weekend-col' : ''}">
           <div class="col-date-text">${f.monthDay}</div>
@@ -1557,7 +1586,7 @@ class ScheduleApp {
     STATUS_LIST.forEach(status => {
       const isFieldStatus = (status === "現場");
       const statusKey = this.getStatusKey(status);
-      
+
       const statusAllItems = filtered.filter(s => this.normalizeStatus(s.status) === status);
       const { trackAssignments, maxTrackCount } = this.calculateStatusTracks(statusAllItems);
 
@@ -1588,7 +1617,7 @@ class ScheduleApp {
           const item = itemByTrack.get(t);
           if (item) {
             const memberChips = (item.members || []).map(m => `<span class="member-chip-sm">${this.escapeHtml(m)}</span>`).join('');
-            
+
             const prevDateStr = this.addDaysToDateStr(dStr, -1);
             const nextDateStr = this.addDaysToDateStr(dStr, 1);
             const hasPrev = !!(item.title && filtered.find(s => s.date === prevDateStr && s.title === item.title && this.normalizeStatus(s.status) === status));
@@ -1649,7 +1678,7 @@ class ScheduleApp {
     this.matrixTableContainer.innerHTML = html;
   }
 
-  // ================= Mobile Day View (日別・当日確認) =================
+  // ================= Mobile Day View =================
   renderMobileDaily() {
     let stripHtml = "";
     this.dateRange.forEach(dStr => {
@@ -1696,7 +1725,7 @@ class ScheduleApp {
 
         groupItems.forEach(item => {
           const memberTags = (item.members || []).map(m => `<span class="member-chip-sm">${this.escapeHtml(m)}</span>`).join('');
-          
+
           if (isFieldStatus) {
             html += `
               <div class="mobile-event-card" onclick="window.app.openDetailModal('${item.id}')">
@@ -1731,7 +1760,7 @@ class ScheduleApp {
     this.mobileCardsContainer.innerHTML = html;
   }
 
-  // ================= Mobile Month View (月毎表示) =================
+  // ================= Mobile Month View =================
   renderMobileMonthly() {
     const [yearStr, monthStr] = this.currentYearMonth.split('-');
     const year = Number(yearStr);
@@ -1753,7 +1782,7 @@ class ScheduleApp {
       const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const isSelected = (dateStr === this.currentDate);
       const isToday = (dateStr === this.realToday);
-      
+
       const daySchedules = filtered.filter(s => s.date === dateStr);
 
       let dotsHtml = "";
@@ -1772,7 +1801,7 @@ class ScheduleApp {
     this.mobileMonthCalendarGrid.innerHTML = gridHtml;
 
     const monthSchedules = filtered.filter(s => s.date && s.date.startsWith(this.currentYearMonth));
-    
+
     if (this.mobileAgendaTitle) this.mobileAgendaTitle.textContent = `${month}月の全スケジュール`;
     if (this.mobileAgendaCount) this.mobileAgendaCount.textContent = `${monthSchedules.length}件`;
 
@@ -1851,11 +1880,10 @@ class ScheduleApp {
     if (norm.includes("現場")) return "field";
     if (norm.includes("社内")) return "office";
     if (norm.includes("休") || norm.includes("有休")) return "off";
-    if (norm.includes("泊") || norm.includes("5階") || norm.includes("ﾎﾃﾙ")) return "stay";
+    if (norm.includes("泊") || norm.includes("5階") || norm.includes("ﾎﾃル")) return "stay";
     return "field";
   }
 
-  // ================= Modal Handlers =================
   openDetailModal(itemId) {
     let item = this.schedules.find(s => s.id === itemId);
     if (!item) return;
