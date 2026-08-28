@@ -638,7 +638,7 @@ class ScheduleApp {
       if (this.isSwipeThrottled) return;
       this.isSwipeThrottled = true;
 
-      const container = this.mobileCardsContainer || this.mobileSubViewMonth;
+      const container = this.mobileMonthAgendaList || this.mobileTouchArea;
       if (diffX < 0) {
         if (container) {
           container.classList.remove('swipe-anim-left', 'swipe-anim-right');
@@ -661,7 +661,7 @@ class ScheduleApp {
     }
   }
 
-  // 選択した日付へスムーズにスクロール移動
+  // 選択した日付へスムーズにスクロール移動 (PC)
   scrollToCurrentDate() {
     if (!this.matrixScrollWrapper) return;
     const targetTh = this.matrixTableContainer.querySelector(`th.selected-col, th.today-col`);
@@ -688,20 +688,6 @@ class ScheduleApp {
     this.spanTabs.forEach(t => t.classList.toggle("active", t.dataset.span === span));
     this.viewSpan = span;
 
-    if (span === "month") {
-      this.mobileSubMode = "month";
-      if (this.mobileSubViewDay) this.mobileSubViewDay.classList.remove("active");
-      if (this.mobileSubViewMonth) this.mobileSubViewMonth.classList.add("active");
-      if (this.mobileHeaderBadge) this.mobileHeaderBadge.style.display = "none";
-      if (this.mobileMonthNav) this.mobileMonthNav.style.display = "flex";
-    } else {
-      this.mobileSubMode = "day";
-      if (this.mobileSubViewDay) this.mobileSubViewDay.classList.add("active");
-      if (this.mobileSubViewMonth) this.mobileSubViewMonth.classList.remove("active");
-      if (this.mobileHeaderBadge) this.mobileHeaderBadge.style.display = "inline-block";
-      if (this.mobileMonthNav) this.mobileMonthNav.style.display = "none";
-    }
-
     this.generateDateRange(this.currentDate);
     this.updateHeaderDates();
     this.render();
@@ -721,6 +707,12 @@ class ScheduleApp {
   }
 
   stepDateBySpan(direction) {
+    if (this.currentView === "mobile") {
+      // スマホ表示時は常に月送り
+      this.stepMonth(direction);
+      return;
+    }
+
     const [y, m, d] = this.currentDate.split('-').map(Number);
     const dt = new Date(y, m - 1, d);
 
@@ -1760,7 +1752,7 @@ class ScheduleApp {
     this.mobileCardsContainer.innerHTML = html;
   }
 
-  // ================= Mobile Month View =================
+  // ================= Mobile Month View (常に1ヶ月カレンダー＋連続アジェンダ一覧) =================
   renderMobileMonthly() {
     const [yearStr, monthStr] = this.currentYearMonth.split('-');
     const year = Number(yearStr);
@@ -1773,6 +1765,7 @@ class ScheduleApp {
 
     const filtered = this.filterList(this.schedules);
 
+    // 1. 上部ミニカレンダーのマス目生成
     let gridHtml = "";
     for (let i = 0; i < startWeekday; i++) {
       gridHtml += `<div class="cal-day-cell other-month"></div>`;
@@ -1792,7 +1785,7 @@ class ScheduleApp {
       }
 
       gridHtml += `
-        <div class="cal-day-cell ${isSelected ? 'selected-day' : ''} ${isToday ? 'today-marker' : ''}" onclick="window.app.onSelectMonthDay('${dateStr}')">
+        <div class="cal-day-cell ${isSelected ? 'selected-day' : ''} ${isToday ? 'today-marker' : ''}" id="cal_cell_${dateStr}" onclick="window.app.onSelectMonthDay('${dateStr}')">
           <span>${d}</span>
           ${dotsHtml}
         </div>
@@ -1800,36 +1793,41 @@ class ScheduleApp {
     }
     this.mobileMonthCalendarGrid.innerHTML = gridHtml;
 
+    // 2. 下部アジェンダリスト（1日〜末日まで日付順に連続して並ぶ）
     const monthSchedules = filtered.filter(s => s.date && s.date.startsWith(this.currentYearMonth));
 
-    if (this.mobileAgendaTitle) this.mobileAgendaTitle.textContent = `${month}月の全スケジュール`;
-    if (this.mobileAgendaCount) this.mobileAgendaCount.textContent = `${monthSchedules.length}件`;
+    if (this.mobileAgendaTitle) this.mobileAgendaTitle.textContent = `${month}月のスケジュール一覧`;
+    if (this.mobileAgendaCount) this.mobileAgendaCount.textContent = `全${monthSchedules.length}件`;
 
     let agendaHtml = "";
-    if (monthSchedules.length === 0) {
-      agendaHtml = `<div class="mobile-empty-state"><div class="empty-title">この月の予定はありません</div></div>`;
-    } else {
-      const dateGroups = {};
-      monthSchedules.forEach(s => {
-        if (!dateGroups[s.date]) dateGroups[s.date] = [];
-        dateGroups[s.date].push(s);
-      });
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const items = filtered.filter(s => s.date === dateStr);
+      const f = this.formatShortDate(dateStr);
+      const isSelected = (dateStr === this.currentDate);
+      const isToday = (dateStr === this.realToday);
 
-      const sortedDates = Object.keys(dateGroups).sort();
-      sortedDates.forEach(dStr => {
-        const items = dateGroups[dStr];
-        const f = this.formatShortDate(dStr);
-        const isSelected = (dStr === this.currentDate);
+      let headingClass = "";
+      if (f.weekday === "日") headingClass = "sunday-heading";
+      else if (f.weekday === "土") headingClass = "weekend-heading";
 
+      agendaHtml += `
+        <div class="agenda-day-block ${isSelected ? 'agenda-day-selected' : ''}" id="agenda_day_${dateStr}" data-date="${dateStr}">
+          <div class="agenda-day-heading ${headingClass}" onclick="window.app.onSelectMonthDay('${dateStr}')">
+            <span>📅 ${f.monthDay} (${f.weekday}) ${isToday ? '<span style="font-size:10px; background:#2563eb; color:white; padding:1px 6px; border-radius:10px; margin-left:4px;">今日</span>' : ''}</span>
+            <span style="font-size:11px; font-weight:700; color:var(--text-muted);">${items.length > 0 ? items.length + '件' : '予定なし'}</span>
+          </div>
+          <div class="mobile-group-body" style="padding: 2px 0 6px;">
+      `;
+
+      if (items.length === 0) {
         agendaHtml += `
-          <div class="agenda-day-block ${isSelected ? 'agenda-day-selected' : ''}">
-            <div class="agenda-day-heading" onclick="window.app.onSelectMonthDay('${dStr}')">
-              <span>📅 ${f.monthDay} (${f.weekday})</span>
-              <span>${items.length}件</span>
-            </div>
-            <div class="mobile-group-body" style="padding: 4px 0;">
+          <div class="agenda-day-empty-note">
+            予定はありません
+            ${this.isAdmin ? `<button type="button" class="btn-text-link" style="margin-left:6px;" onclick="window.app.openCreateModal('${dateStr}', '現場')">＋ 追加</button>` : ''}
+          </div>
         `;
-
+      } else {
         items.forEach(item => {
           const normStatus = this.normalizeStatus(item.status);
           const isField = (normStatus === "現場");
@@ -1843,30 +1841,57 @@ class ScheduleApp {
                 ${item.details ? `<div class="event-details">${this.escapeHtml(item.details)}</div>` : ''}
                 <div class="event-footer">
                   <div class="event-members">${memberTags}</div>
-                  <span class="view-detail-hint">詳細 &rsaquo;</span>
+                  <span class="view-detail-hint">${this.isAdmin ? '詳細 / 編集' : '詳細'} &rsaquo;</span>
                 </div>
               ` : `
                 <div class="event-footer" style="margin-top:0; padding-top:0; border-top:none;">
                   <span class="modal-status-pill status-${statusKey}" style="font-size:10px; padding:2px 8px;">${normStatus}</span>
                   <div class="event-members">${memberTags || '<span style="font-size:10px; color:var(--text-muted);">未設定</span>'}</div>
-                  <span class="view-detail-hint">詳細 &rsaquo;</span>
+                  <span class="view-detail-hint">${this.isAdmin ? '詳細 / 編集' : '詳細'} &rsaquo;</span>
                 </div>
                 ${item.details ? `<div class="event-details" style="margin-top:4px;">${this.escapeHtml(item.details)}</div>` : ''}
               `}
             </div>
           `;
         });
+      }
 
-        agendaHtml += `</div></div>`;
-      });
+      agendaHtml += `</div></div>`;
     }
 
     this.mobileMonthAgendaList.innerHTML = agendaHtml;
   }
 
+  // カレンダーの日付タップ時に、その日付の位置へスムーズ自動スクロール＆フォーカス
   onSelectMonthDay(dateStr) {
     this.currentDate = dateStr;
-    this.switchSpan("week");
+    
+    // カレンダーの選択スタイル更新
+    document.querySelectorAll('.cal-day-cell').forEach(cell => cell.classList.remove('selected-day'));
+    const targetCell = document.getElementById(`cal_cell_${dateStr}`);
+    if (targetCell) {
+      targetCell.classList.add('selected-day');
+    }
+
+    // アジェンダ一覧内の該当する日付位置へスムーズに自動スクロール
+    const agendaEl = document.getElementById(`agenda_day_${dateStr}`);
+    if (agendaEl) {
+      agendaEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      agendaEl.classList.remove('agenda-day-focused');
+      void agendaEl.offsetWidth; // リフロー強制
+      agendaEl.classList.add('agenda-day-focused');
+    }
+
+    this.updateHeaderDates();
+  }
+
+  render() {
+    if (this.currentView === "pc") {
+      this.renderPcMatrix();
+    } else {
+      // スマホ表示は常に1ヶ月カレンダー＋連続アジェンダ一覧
+      this.renderMobileMonthly();
+    }
   }
 
   selectDate(dateStr) {

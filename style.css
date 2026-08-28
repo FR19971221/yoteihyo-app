@@ -1385,29 +1385,80 @@ body.mode-readonly .empty-matrix-slot {
 
 /* Mobile Month Agenda List */
 .mobile-month-agenda-header {
-  padding: 8px 16px 4px;
+  padding: 10px 16px 6px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-main);
+  border-bottom: 1px solid var(--border-light);
+  background: white;
+  position: sticky;
+  top: 0;
+  z-index: 5;
 }
 
 .agenda-day-block {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
+  border-radius: var(--radius-md);
+  transition: all 0.3s ease;
+  scroll-margin-top: 50px;
 }
 
 .agenda-day-heading {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 800;
   color: var(--text-main);
-  background: #e2e8f0;
-  padding: 4px 10px;
+  background: #f1f5f9;
+  padding: 6px 12px;
   border-radius: var(--radius-sm);
   margin-bottom: 6px;
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  border-left: 4px solid var(--primary-500);
+}
+
+.agenda-day-heading.weekend-heading {
+  background: #eff6ff;
+  border-left-color: #3b82f6;
+}
+
+.agenda-day-heading.sunday-heading {
+  background: #fef2f2;
+  border-left-color: #ef4444;
+}
+
+.agenda-day-empty-note {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 6px 12px;
+  background: #fafafa;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-light);
+  margin-bottom: 6px;
+}
+
+/* カレンダータップ時のフォーカス・ハイライトアニメーション */
+.agenda-day-focused {
+  animation: agendaFocusPulse 1.2s ease-out;
+}
+
+@keyframes agendaFocusPulse {
+  0% {
+    background-color: rgba(37, 99, 235, 0.25);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.4);
+    transform: scale(1.01);
+  }
+  70% {
+    background-color: rgba(37, 99, 235, 0.1);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+    transform: scale(1);
+  }
 }
 
 .mobile-phone-speaker {

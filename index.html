@@ -239,7 +239,7 @@
       </div>
     </section>
 
-    <!-- 2. Mobile View (スマホ版) -->
+    <!-- 2. Mobile View (スマホ版：常に1ヶ月カレンダー＋連続アジェンダ一覧) -->
     <section id="mobileDailySection" class="view-pane">
       <div class="mobile-simulator-layout">
         <div class="mobile-phone-frame" id="mobileTouchArea">
@@ -247,56 +247,38 @@
           <!-- Mobile Screen Header (Hero Date & Month Nav) -->
           <div class="mobile-screen-header">
             <div class="mobile-header-top">
-              <span class="mobile-today-chip" id="mobileHeaderBadge">TODAY</span>
-              <div class="mobile-month-nav" id="mobileMonthNav" style="display:none;">
+              <div class="mobile-month-nav" id="mobileMonthNav">
                 <button id="mobilePrevMonthBtn" class="m-nav-btn" title="前月へ">◀</button>
                 <span id="mobileMonthLabel" class="m-nav-label">2026年8月</span>
                 <button id="mobileNextMonthBtn" class="m-nav-btn" title="翌月へ">▶</button>
               </div>
             </div>
-            <div class="mobile-date-hero" id="mobileDateHero">8月19日 (水)</div>
-            <div class="mobile-swipe-hint">↔ 左右スワイプで前後の期間へ連続移動</div>
+            <div class="mobile-swipe-hint">↔ 左右スワイプで前後の月へ移動 / 日付タップで該当位置へジャンプ</div>
           </div>
 
-          <!-- SUB-VIEW 1: Mobile Day View (1週間・半月 選択時) -->
-          <div id="mobileSubViewDay" class="mobile-subview active">
-            <div class="mobile-date-strip-wrapper">
-              <div class="mobile-date-strip" id="mobileDateStrip">
-                <!-- JSで日付ピルを生成 -->
-              </div>
+          <!-- Monthly Mini Calendar Grid (上部固定ミニカレンダー) -->
+          <div class="mobile-month-calendar-card">
+            <div class="month-calendar-weekdays">
+              <span class="sun">日</span>
+              <span>月</span>
+              <span>火</span>
+              <span>水</span>
+              <span>木</span>
+              <span>金</span>
+              <span class="sat">土</span>
             </div>
-
-            <div class="mobile-content-area" id="mobileCardsContainer">
-              <!-- JSでステータス別グループカードを生成 -->
+            <div class="month-calendar-grid" id="mobileMonthCalendarGrid">
+              <!-- JSでカレンダーマス目を動的生成 -->
             </div>
           </div>
 
-          <!-- SUB-VIEW 2: Mobile Month View (1ヶ月 選択時) -->
-          <div id="mobileSubViewMonth" class="mobile-subview">
-            <!-- Monthly Mini Calendar Grid -->
-            <div class="mobile-month-calendar-card">
-              <div class="month-calendar-weekdays">
-                <span class="sun">日</span>
-                <span>月</span>
-                <span>火</span>
-                <span>水</span>
-                <span>木</span>
-                <span>金</span>
-                <span class="sat">土</span>
-              </div>
-              <div class="month-calendar-grid" id="mobileMonthCalendarGrid">
-                <!-- JSでカレンダーマス目を動的生成 -->
-              </div>
-            </div>
-
-            <!-- Monthly Schedule Agenda List -->
-            <div class="mobile-month-agenda-header">
-              <span class="agenda-title" id="mobileAgendaTitle">月間全スケジュール</span>
-              <span class="agenda-count" id="mobileAgendaCount">0件</span>
-            </div>
-            <div class="mobile-content-area mobile-agenda-list" id="mobileMonthAgendaList">
-              <!-- JSで月内の日付ごとのアジェンダカードを生成 -->
-            </div>
+          <!-- Monthly Schedule Agenda List (下部：日付順に連続して並ぶ一覧) -->
+          <div class="mobile-month-agenda-header">
+            <span class="agenda-title" id="mobileAgendaTitle">8月のスケジュール一覧</span>
+            <span class="agenda-count" id="mobileAgendaCount">0件</span>
+          </div>
+          <div class="mobile-content-area mobile-agenda-list" id="mobileMonthAgendaList">
+            <!-- JSで月内の日付ごとのアジェンダカードを生成 -->
           </div>
 
         </div>
