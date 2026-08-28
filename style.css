@@ -2451,29 +2451,41 @@ body.mode-readonly .empty-matrix-slot {
     grid-template-columns: 1fr;
   }
 
-  /* --- スクロールとなめらかさの調整 --- */
-  .calendar-container {
-    display: flex;
-    overflow-x: auto;
-    scroll-behavior: smooth;
-    -webkit-overflow-scrolling: touch;
+  /* --- スクロールとなめらかさの調整（修正版） --- */
+  .matrix-scroll-wrapper,
+  .mobile-date-strip,
+  .filter-ribbon {
+    display: block;
+    overflow-x: auto !important;
+    scroll-behavior: smooth !important;
+    -webkit-overflow-scrolling: touch !important;
     scroll-snap-type: none !important;
   }
 
-  /* --- スマホ閲覧時はスマホ表示のみに固定 --- */
+  /* --- スマホ閲覧時はスマホ表示（モバイル専用レイアウト）のみに固定 --- */
   @media screen and (max-width: 768px) {
 
-    /* PC切替用のボタン類を非表示 */
-    .view-switch-btn-pc,
-    .pc-mode-toggle {
+    /* PC用のヘッダー切り替えボタン・表示切替を非表示 */
+    .view-toggle-container,
+    .span-toggle-group,
+    .pane-header {
       display: none !important;
     }
 
-    /* PCレイアウトを隠し、スマホレイアウトを表示 */
-    .pc-layout {
+    /* PC版のマトリックス表示（表）を隠す */
+    #matrix-view {
       display: none !important;
     }
 
-    .mobile-layout {
+    /* スマホ版（モバイルシミュレーター風表示）を強制的に全幅で表示 */
+    #mobile-view {
       display: block !important;
     }
+
+    .mobile-phone-frame {
+      max-width: 100% !important;
+      border: none !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+    }
+  }
