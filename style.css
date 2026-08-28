@@ -2462,28 +2462,29 @@ body.mode-readonly .empty-matrix-slot {
     scroll-snap-type: none !important;
   }
 
-  /* --- スマホ閲覧時はスマホ表示（モバイル専用レイアウト）のみに固定 --- */
+  /* --- スマホ表示の完全強制化（オーバーライド設定） --- */
   @media screen and (max-width: 768px) {
 
-    /* PC用のヘッダー切り替えボタン・表示切替を非表示 */
-    .view-toggle-container,
-    .span-toggle-group,
+    /* PC用マトリックス表を完全に隠す */
+    #pcMatrixSection,
+    #matrix-view,
+    .matrix-card-container,
     .pane-header {
       display: none !important;
     }
 
-    /* PC版のマトリックス表示（表）を隠す */
-    #matrix-view {
-      display: none !important;
-    }
-
-    /* スマホ版（モバイルシミュレーター風表示）を強制的に全幅で表示 */
+    /* スマホ専用セクションを全幅で強制表示 */
+    #mobileDailySection,
     #mobile-view {
       display: block !important;
+      width: 100% !important;
+      max-width: 100vw !important;
     }
 
+    /* 枠線やシミュレーター風の固定幅を解除して画面いっぱいに広げる */
     .mobile-phone-frame {
       max-width: 100% !important;
+      width: 100% !important;
       border: none !important;
       border-radius: 0 !important;
       box-shadow: none !important;

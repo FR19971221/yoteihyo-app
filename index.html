@@ -209,7 +209,7 @@
   <!-- Floating Action Button (FAB) for Mobile Quick Add (Edit Mode Only) -->
   <button id="floatingAddBtn" class="floating-add-fab auth-only" aria-label="予定を追加" title="予定を追加">
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-      <path d="M12 5v14M5 12h14"/>
+      <path d="M12 5v14M5 12h14" />
     </svg>
   </button>
 
@@ -317,7 +317,7 @@
       </div>
       <div class="modal-dialog-body">
         <h3 id="modalTitle" class="modal-event-title">案件タイトル</h3>
-        
+
         <div class="modal-info-grid">
           <div class="info-block">
             <span class="info-label">日付</span>
@@ -398,7 +398,8 @@
               <!-- JSで動的生成 & 選択 -->
             </div>
             <div class="member-add-inline">
-              <input type="text" id="customMemberInput" class="custom-member-input" placeholder="新しいメンバー名 (例: 田中, 佐)" maxlength="10" />
+              <input type="text" id="customMemberInput" class="custom-member-input" placeholder="新しいメンバー名 (例: 田中, 佐)"
+                maxlength="10" />
               <button type="button" id="btnAddCustomMember" class="btn-add-member">＋ 追加</button>
             </div>
           </div>
@@ -407,7 +408,8 @@
         <!-- Details / Memo -->
         <div class="form-group">
           <label for="formDetails" class="form-label">備考・特記事項・時間</label>
-          <textarea id="formDetails" class="form-textarea" rows="3" placeholder="例: 9:00〜17:00 / 渋谷区桜丘町 / トラック2台"></textarea>
+          <textarea id="formDetails" class="form-textarea" rows="3"
+            placeholder="例: 9:00〜17:00 / 渋谷区桜丘町 / トラック2台"></textarea>
         </div>
 
         <!-- Form Actions -->
@@ -468,7 +470,7 @@
         <button id="batchModalCloseBtn" class="modal-close-trigger" aria-label="閉じる">&times;</button>
       </div>
       <div class="modal-dialog-body">
-        
+
         <div class="batch-tabs">
           <button class="batch-tab active" data-tab="bulk-add">➕ 期間一括登録</button>
           <button class="batch-tab" data-tab="bulk-delete">🗑️ 条件一括削除</button>
@@ -581,7 +583,8 @@
       <form id="adminLoginForm" class="edit-form">
         <div class="form-group">
           <label for="adminPasswordInput" class="form-label">管理者パスワード</label>
-          <input type="password" id="adminPasswordInput" class="form-input" placeholder="パスワードを入力..." required autofocus />
+          <input type="password" id="adminPasswordInput" class="form-input" placeholder="パスワードを入力..." required
+            autofocus />
           <span class="form-sublabel">※ 初期パスワード: admin（firebase-config.jsで変更可能）</span>
         </div>
         <div id="adminLoginError" class="auth-error-msg" style="display: none;">パスワードが正しくありません</div>
@@ -595,4 +598,5 @@
 
   <script src="app.js"></script>
 </body>
+
 </html>
