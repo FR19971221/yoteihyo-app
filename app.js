@@ -1,14 +1,6 @@
 /**
  * 東京事務所予定表 Webアプリケーション
- * 
- * 1. Firebase Firestore リアルタイム同期 (マルチデバイス自動更新)
- * 2. 閲覧権限・編集権限の分離 (デフォルト: 閲覧専用 / 管理者ログインで編集解除)
- * 3. 表示スパン切替 (1週間:7日 / 半月:15日 / 月毎:1ヶ月) [PC・スマホ完全統合]
- * 4. 2軸 Sticky スクロール (左側ステータス固定 & 上部日付ヘッダー固定)
- * 5. 「今日へ」ボタンのリアルタイムPC日時 (Today) リンク
- * 6. 複数日タスクの段(レーン)一致・連結帯 (コネクテッドバー) 表示 & 個別日編集の完全両立
- * 7. スマホ向けUI集約 (ハンバーガードロワーメニュー & 右下固定FABボタン)
- * 8. 連続・スムーズな無制限横スクロール表示（ページネーションの廃止）
+ * スマホ版：1ヶ月カレンダー固定 ＋ 日付タップで該当スケジュールへスムーススクロール
  */
 
 const STATUS_LIST = [
@@ -22,7 +14,6 @@ const STATUS_LIST = [
 
 const INITIAL_MEMBERS = ["M", "R", "Z", "吉", "黒", "佐藤"];
 
-// 初期フォールバック用データ
 const INITIAL_DEMO_SCHEDULES = [
   { id: "s1", date: "2026-08-19", status: "現場", title: "【渋谷現場】改修工事・機材搬入", details: "9:00〜17:00 / 渋谷区桜丘町 / トラック2台", members: ["M", "R", "吉"] },
   { id: "s2", date: "2026-08-19", status: "現場", title: "【新宿現場】定期点検・動作テスト", details: "13:00〜18:00 / 担当者立会あり", members: ["Z"] },
@@ -43,7 +34,6 @@ class ScheduleApp {
     this.schedules = [];
     this.allMembers = [...INITIAL_MEMBERS];
 
-    // リアルタイムPC現在日時（Today）を基準日に設定
     this.realToday = this.getRealTodayYmd();
     this.currentDate = this.realToday;
     this.currentYearMonth = this.currentDate.substring(0, 7);
@@ -51,10 +41,9 @@ class ScheduleApp {
     this.selectedMember = "ALL";
     this.searchKeyword = "";
 
-    // 画面幅が768px以下の場合は自動的にスマホ表示に固定
     this.currentView = window.innerWidth <= 768 ? "mobile" : "pc";
-    this.mobileSubMode = "day"; // 'day' or 'month'
-    this.viewSpan = "week"; // 'week', 'halfmonth', 'month'
+    this.mobileSubMode = "month"; // スマホ版は1ヶ月表示をデフォルト＆固定
+    this.viewSpan = "month";
     this.isAdmin = false;
     this.activeModalItemId = null;
 
@@ -62,22 +51,13 @@ class ScheduleApp {
     this.isCloudConnected = false;
     this.unsubscribeFirestore = null;
 
-    // スクロール・スワイプの連続送り制御
-    this.isSwipeThrottled = false;
-    this.touchStartX = 0;
-    this.touchStartY = 0;
-    this.touchEndX = 0;
-    this.touchEndY = 0;
-
     this.checkAdminSession();
     this.generateDateRange(this.currentDate);
 
     this.bindDom();
     this.bindEvents();
-    this.initSwipeAndScrollGestures();
     this.initFirebaseAndLoadData();
 
-    // 画面リサイズ時にスマホなら自動的にビューを切り替え
     window.addEventListener("resize", () => {
       if (window.innerWidth <= 768 && this.currentView !== "mobile") {
         this.switchView("mobile");
@@ -124,25 +104,12 @@ class ScheduleApp {
     }
   }
 
-  // ================= 横スクロールでなめらかに繋がる広範囲の日付生成 =================
   generateDateRange(centerDateStr) {
     const [y, m, d] = centerDateStr.split('-').map(Number);
     const center = new Date(y, m - 1, d);
     const range = [];
 
-    // 一気に画面が変わるのを防ぎ、前後を含めた連続表示を可能にするため広い範囲を生成
-    let pastDays = 14;
-    let futureDays = 30;
-
-    if (this.viewSpan === "halfmonth") {
-      pastDays = 20;
-      futureDays = 40;
-    } else if (this.viewSpan === "month") {
-      pastDays = 30;
-      futureDays = 60;
-    }
-
-    for (let i = -pastDays; i <= futureDays; i++) {
+    for (let i = -15; i <= 45; i++) {
       const target = new Date(center);
       target.setDate(target.getDate() + i);
       range.push(this.formatYmd(target));
@@ -184,7 +151,6 @@ class ScheduleApp {
     this.pcSection = document.getElementById("pcMatrixSection");
     this.mobileSection = document.getElementById("mobileDailySection");
 
-    // Header Controls
     this.prevDateBtn = document.getElementById("prevDateBtn");
     this.nextDateBtn = document.getElementById("nextDateBtn");
     this.todayBtn = document.getElementById("todayBtn");
@@ -192,7 +158,6 @@ class ScheduleApp {
     this.hiddenDatePicker = document.getElementById("hiddenDatePicker");
     this.currentDateDisplay = document.getElementById("currentDateDisplay");
 
-    // Auth & Sync DOM
     this.badgeReadOnly = document.getElementById("badgeReadOnly");
     this.badgeAdminMode = document.getElementById("badgeAdminMode");
     this.syncIndicator = document.getElementById("syncIndicator");
@@ -205,7 +170,6 @@ class ScheduleApp {
     this.adminLoginCloseBtn = document.getElementById("adminLoginCloseBtn");
     this.btnCancelAdminLogin = document.getElementById("btnCancelAdminLogin");
 
-    // Action Tools & FAB
     this.btnNewSchedule = document.getElementById("btnNewSchedule");
     this.floatingAddBtn = document.getElementById("floatingAddBtn");
     this.btnBatchActions = document.getElementById("btnBatchActions");
@@ -214,7 +178,6 @@ class ScheduleApp {
     this.btnImportData = document.getElementById("btnImportData");
     this.fileImportInput = document.getElementById("fileImportInput");
 
-    // Mobile Hamburger & Drawer DOM
     this.btnHamburgerMenu = document.getElementById("btnHamburgerMenu");
     this.mobileNavDrawer = document.getElementById("mobileNavDrawer");
     this.mobileDrawerOverlay = document.getElementById("mobileDrawerOverlay");
@@ -225,7 +188,6 @@ class ScheduleApp {
     this.drawerBtnExportData = document.getElementById("drawerBtnExportData");
     this.drawerBtnImportData = document.getElementById("drawerBtnImportData");
 
-    // Ribbon Controls (Span & Filter)
     this.spanTabs = document.querySelectorAll(".span-tab");
     this.memberFilterList = document.getElementById("memberFilterList");
     this.searchInput = document.getElementById("searchInput");
@@ -234,7 +196,6 @@ class ScheduleApp {
     this.matrixTableContainer = document.getElementById("matrixTableContainer");
     this.matrixScrollWrapper = document.getElementById("matrixScrollWrapper");
 
-    // Mobile View DOM
     this.mobileTouchArea = document.getElementById("mobileTouchArea");
     this.mobileSubViewDay = document.getElementById("mobileSubViewDay");
     this.mobileSubViewMonth = document.getElementById("mobileSubViewMonth");
@@ -252,7 +213,6 @@ class ScheduleApp {
     this.mobileAgendaTitle = document.getElementById("mobileAgendaTitle");
     this.mobileAgendaCount = document.getElementById("mobileAgendaCount");
 
-    // Detail Modal
     this.detailModal = document.getElementById("scheduleModal");
     this.modalCloseBtn = document.getElementById("modalCloseBtn");
     this.modalEditBtn = document.getElementById("modalEditBtn");
@@ -262,7 +222,6 @@ class ScheduleApp {
     this.modalMembers = document.getElementById("modalMembers");
     this.modalDetails = document.getElementById("modalDetails");
 
-    // Edit/Create Modal
     this.editModal = document.getElementById("editModal");
     this.editModalCloseBtn = document.getElementById("editModalCloseBtn");
     this.btnCancelEdit = document.getElementById("btnCancelEdit");
@@ -286,14 +245,12 @@ class ScheduleApp {
     this.btnAddCustomMember = document.getElementById("btnAddCustomMember");
     this.btnOpenMemberManagerFromForm = document.getElementById("btnOpenMemberManagerFromForm");
 
-    // Member Manager Modal
     this.memberManagerModal = document.getElementById("memberManagerModal");
     this.memberManagerCloseBtn = document.getElementById("memberManagerCloseBtn");
     this.newMemberInputModal = document.getElementById("newMemberInputModal");
     this.btnAddNewMemberModal = document.getElementById("btnAddNewMemberModal");
     this.memberManagerTableBody = document.getElementById("memberManagerTableBody");
 
-    // Batch Modal
     this.batchModal = document.getElementById("batchModal");
     this.batchModalCloseBtn = document.getElementById("batchModalCloseBtn");
     this.bulkAddForm = document.getElementById("bulkAddForm");
@@ -315,7 +272,6 @@ class ScheduleApp {
     if (this.btnPcView) this.btnPcView.addEventListener("click", () => this.switchView("pc"));
     if (this.btnMobileView) this.btnMobileView.addEventListener("click", () => this.switchView("mobile"));
 
-    // 期間スパン切り替えタブ
     this.spanTabs.forEach(tab => {
       tab.addEventListener("click", () => {
         const span = tab.dataset.span;
@@ -323,12 +279,10 @@ class ScheduleApp {
       });
     });
 
-    // Mobile Drawer Open / Close
     if (this.btnHamburgerMenu) this.btnHamburgerMenu.addEventListener("click", () => this.openMobileDrawer());
     if (this.btnDrawerClose) this.btnDrawerClose.addEventListener("click", () => this.closeMobileDrawer());
     if (this.mobileDrawerOverlay) this.mobileDrawerOverlay.addEventListener("click", () => this.closeMobileDrawer());
 
-    // Drawer Menu Items
     if (this.drawerBtnNewSchedule) {
       this.drawerBtnNewSchedule.addEventListener("click", () => {
         this.closeMobileDrawer();
@@ -360,14 +314,12 @@ class ScheduleApp {
       });
     }
 
-    // Floating Action Button (FAB)
     if (this.floatingAddBtn) {
       this.floatingAddBtn.addEventListener("click", () => {
         if (this.isAdmin) this.openCreateModal(this.currentDate, "現場");
       });
     }
 
-    // Admin Auth Actions
     if (this.btnAdminLogin) this.btnAdminLogin.addEventListener("click", () => this.openAdminLoginModal());
     if (this.btnAdminLogout) {
       this.btnAdminLogout.addEventListener("click", () => {
@@ -403,21 +355,20 @@ class ScheduleApp {
     if (this.mobilePrevMonthBtn) this.mobilePrevMonthBtn.addEventListener("click", () => this.stepMonth(-1));
     if (this.mobileNextMonthBtn) this.mobileNextMonthBtn.addEventListener("click", () => this.stepMonth(1));
 
-    // 「今日へ」ボタン
     if (this.todayBtn) {
       this.todayBtn.addEventListener("click", () => {
         this.realToday = this.getRealTodayYmd();
         this.currentDate = this.realToday;
+        this.currentYearMonth = this.currentDate.substring(0, 7);
         this.generateDateRange(this.currentDate);
         this.updateHeaderDates();
         this.render();
-        this.scrollToCurrentDate();
+        this.onSelectMonthDay(this.realToday);
       });
     }
 
-    // 日付移動ボタン
-    if (this.prevDateBtn) this.prevDateBtn.addEventListener("click", () => this.stepDateBySpan(-1));
-    if (this.nextDateBtn) this.nextDateBtn.addEventListener("click", () => this.stepDateBySpan(1));
+    if (this.prevDateBtn) this.prevDateBtn.addEventListener("click", () => this.stepMonth(-1));
+    if (this.nextDateBtn) this.nextDateBtn.addEventListener("click", () => this.stepMonth(1));
 
     if (this.dateDisplayBtn) {
       this.dateDisplayBtn.addEventListener("click", () => {
@@ -429,10 +380,11 @@ class ScheduleApp {
       this.hiddenDatePicker.addEventListener("change", (e) => {
         if (e.target.value) {
           this.currentDate = e.target.value;
+          this.currentYearMonth = this.currentDate.substring(0, 7);
           this.generateDateRange(this.currentDate);
           this.updateHeaderDates();
           this.render();
-          this.scrollToCurrentDate();
+          this.onSelectMonthDay(this.currentDate);
         }
       });
     }
@@ -614,63 +566,22 @@ class ScheduleApp {
     });
   }
 
-  // ================= スワイプ & 自然な横スクロール制御 =================
-  initSwipeAndScrollGestures() {
-    const touchTarget = this.mobileTouchArea || document.body;
+  // カレンダーの日付タップ処理（一覧の該当箇所へスムーズスクロール）
+  onSelectMonthDay(dateStr) {
+    this.currentDate = dateStr;
 
-    touchTarget.addEventListener('touchstart', (e) => {
-      this.touchStartX = e.changedTouches[0].screenX;
-      this.touchStartY = e.changedTouches[0].screenY;
-    }, { passive: true });
+    // カレンダーの選択枠を更新
+    this.renderMobileMonthlyCalendarOnly();
 
-    touchTarget.addEventListener('touchend', (e) => {
-      this.touchEndX = e.changedTouches[0].screenX;
-      this.touchEndY = e.changedTouches[0].screenY;
-      this.handleSwipeGesture();
-    }, { passive: true });
-  }
-
-  handleSwipeGesture() {
-    const diffX = this.touchEndX - this.touchStartX;
-    const diffY = this.touchEndY - this.touchStartY;
-
-    if (Math.abs(diffX) > Math.abs(diffY) * 1.4 && Math.abs(diffX) > 50) {
-      if (this.isSwipeThrottled) return;
-      this.isSwipeThrottled = true;
-
-      const container = this.mobileMonthAgendaList || this.mobileTouchArea;
-      if (diffX < 0) {
-        if (container) {
-          container.classList.remove('swipe-anim-left', 'swipe-anim-right');
-          void container.offsetWidth;
-          container.classList.add('swipe-anim-left');
-        }
-        this.stepDateBySpan(1);
-      } else {
-        if (container) {
-          container.classList.remove('swipe-anim-left', 'swipe-anim-right');
-          void container.offsetWidth;
-          container.classList.add('swipe-anim-right');
-        }
-        this.stepDateBySpan(-1);
+    // 下部のスケジュール一覧から該当する日付のブロックを探してスクロール
+    const targetBlock = document.getElementById(`agenda_day_${dateStr}`);
+    if (targetBlock) {
+      targetBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      // 該当する日に予定がない場合は一覧の先頭にスクロール
+      if (this.mobileMonthAgendaList) {
+        this.mobileMonthAgendaList.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
-
-      setTimeout(() => {
-        this.isSwipeThrottled = false;
-      }, 400);
-    }
-  }
-
-  // 選択した日付へスムーズにスクロール移動 (PC)
-  scrollToCurrentDate() {
-    if (!this.matrixScrollWrapper) return;
-    const targetTh = this.matrixTableContainer.querySelector(`th.selected-col, th.today-col`);
-    if (targetTh) {
-      const scrollLeft = targetTh.offsetLeft - 150;
-      this.matrixScrollWrapper.scrollTo({
-        left: scrollLeft,
-        behavior: 'smooth'
-      });
     }
   }
 
@@ -687,7 +598,6 @@ class ScheduleApp {
   switchSpan(span) {
     this.spanTabs.forEach(t => t.classList.toggle("active", t.dataset.span === span));
     this.viewSpan = span;
-
     this.generateDateRange(this.currentDate);
     this.updateHeaderDates();
     this.render();
@@ -706,28 +616,16 @@ class ScheduleApp {
     this.adminLoginModal.setAttribute("aria-hidden", "true");
   }
 
-  stepDateBySpan(direction) {
-    if (this.currentView === "mobile") {
-      // スマホ表示時は常に月送り
-      this.stepMonth(direction);
-      return;
-    }
-
-    const [y, m, d] = this.currentDate.split('-').map(Number);
-    const dt = new Date(y, m - 1, d);
-
-    if (this.viewSpan === "week") {
-      dt.setDate(dt.getDate() + (direction * 7));
-    } else if (this.viewSpan === "halfmonth") {
-      dt.setDate(dt.getDate() + (direction * 15));
-    } else if (this.viewSpan === "month") {
-      dt.setMonth(dt.getMonth() + direction);
-    }
-    this.currentDate = this.formatYmd(dt);
+  stepMonth(direction) {
+    const [y, m] = this.currentYearMonth.split('-').map(Number);
+    const d = new Date(y, m - 1 + direction, 1);
+    const newY = d.getFullYear();
+    const newM = String(d.getMonth() + 1).padStart(2, '0');
+    this.currentYearMonth = `${newY}-${newM}`;
+    this.currentDate = `${newY}-${newM}-01`;
     this.generateDateRange(this.currentDate);
     this.updateHeaderDates();
     this.render();
-    this.scrollToCurrentDate();
   }
 
   async initFirebaseAndLoadData() {
@@ -1399,18 +1297,6 @@ class ScheduleApp {
     this.fileImportInput.value = "";
   }
 
-  stepMonth(direction) {
-    const [y, m] = this.currentYearMonth.split('-').map(Number);
-    const d = new Date(y, m - 1 + direction, 1);
-    const newY = d.getFullYear();
-    const newM = String(d.getMonth() + 1).padStart(2, '0');
-    this.currentYearMonth = `${newY}-${newM}`;
-    this.currentDate = `${newY}-${newM}-01`;
-    this.generateDateRange(this.currentDate);
-    this.updateHeaderDates();
-    this.render();
-  }
-
   switchView(view) {
     this.currentView = view;
     if (view === "pc") {
@@ -1423,6 +1309,7 @@ class ScheduleApp {
       if (this.btnPcView) this.btnPcView.classList.remove("active");
       if (this.mobileSection) this.mobileSection.classList.add("active");
       if (this.pcSection) this.pcSection.classList.remove("active");
+      this.mobileSubMode = "month";
     }
     this.render();
   }
@@ -1456,15 +1343,9 @@ class ScheduleApp {
     if (this.hiddenDatePicker) {
       this.hiddenDatePicker.value = this.currentDate;
     }
-    const f = this.formatShortDate(this.currentDate);
-
-    if (this.mobileSubMode === "day") {
-      if (this.mobileDateHero) this.mobileDateHero.textContent = `${f.monthDay} (${f.weekday})`;
-    } else {
-      const [y, m] = this.currentYearMonth.split('-');
-      if (this.mobileMonthLabel) this.mobileMonthLabel.textContent = `${y}年${Number(m)}月`;
-      if (this.mobileDateHero) this.mobileDateHero.textContent = `${y}年${Number(m)}月 スケジュール`;
-    }
+    const [y, m] = this.currentYearMonth.split('-');
+    if (this.mobileMonthLabel) this.mobileMonthLabel.textContent = `${y}年${Number(m)}月`;
+    if (this.mobileDateHero) this.mobileDateHero.textContent = `${y}年${Number(m)}月 スケジュール`;
   }
 
   filterList(items) {
@@ -1488,11 +1369,7 @@ class ScheduleApp {
     if (this.currentView === "pc") {
       this.renderPcMatrix();
     } else {
-      if (this.mobileSubMode === "day") {
-        this.renderMobileDaily();
-      } else {
-        this.renderMobileMonthly();
-      }
+      this.renderMobileMonthly();
     }
   }
 
@@ -1552,7 +1429,6 @@ class ScheduleApp {
     return { trackAssignments, maxTrackCount };
   }
 
-  // ================= PC Matrix View =================
   renderPcMatrix() {
     const filtered = this.filterList(this.schedules);
     const colWidth = 140;
@@ -1670,90 +1546,85 @@ class ScheduleApp {
     this.matrixTableContainer.innerHTML = html;
   }
 
-  // ================= Mobile Day View =================
-  renderMobileDaily() {
-    let stripHtml = "";
-    this.dateRange.forEach(dStr => {
-      const f = this.formatShortDate(dStr);
-      const isActive = (dStr === this.currentDate) ? "active" : "";
-      stripHtml += `
-        <button class="mobile-date-pill ${isActive}" onclick="window.app.selectDate('${dStr}')">
-          <span class="pill-weekday">${f.weekday}</span>
-          <span class="pill-day">${f.dayNum}</span>
-        </button>
-      `;
-    });
-    this.mobileDateStrip.innerHTML = stripHtml;
+  // ================= Mobile Month View (カレンダー + スムーススクロールリスト) =================
+  renderMobileMonthly() {
+    if (this.mobileSubViewDay) this.mobileSubViewDay.classList.remove("active");
+    if (this.mobileSubViewMonth) this.mobileSubViewMonth.classList.add("active");
+    if (this.mobileHeaderBadge) this.mobileHeaderBadge.style.display = "none";
+    if (this.mobileMonthNav) this.mobileMonthNav.style.display = "flex";
 
-    const dayItems = this.filterList(this.schedules).filter(s => s.date === this.currentDate);
+    this.renderMobileMonthlyCalendarOnly();
 
-    let html = "";
-    if (dayItems.length === 0) {
-      html = `
-        <div class="mobile-empty-state">
-          <div class="empty-icon">☕</div>
-          <div class="empty-title">この日の予定はありません</div>
-          ${this.isAdmin ? `<div class="empty-desc">画面右下の「＋」ボタンから追加できます</div>` : ''}
-        </div>
-      `;
+    const [yearStr, monthStr] = this.currentYearMonth.split('-');
+    const month = Number(monthStr);
+    const filtered = this.filterList(this.schedules);
+
+    // 月全体のスケジュールを取得して日付順にソート
+    const monthSchedules = filtered.filter(s => s.date && s.date.startsWith(this.currentYearMonth));
+
+    if (this.mobileAgendaTitle) this.mobileAgendaTitle.textContent = `${month}月の全スケジュール`;
+    if (this.mobileAgendaCount) this.mobileAgendaCount.textContent = `${monthSchedules.length}件`;
+
+    let agendaHtml = "";
+    if (monthSchedules.length === 0) {
+      agendaHtml = `<div class="mobile-empty-state"><div class="empty-title">この月の予定はありません</div></div>`;
     } else {
-      STATUS_LIST.forEach(status => {
-        const isFieldStatus = (status === "現場");
-        const groupItems = dayItems.filter(s => this.normalizeStatus(s.status) === status);
-        if (groupItems.length === 0) return;
-        const statusKey = this.getStatusKey(status);
+      const dateGroups = {};
+      monthSchedules.forEach(s => {
+        if (!dateGroups[s.date]) dateGroups[s.date] = [];
+        dateGroups[s.date].push(s);
+      });
 
-        html += `
-          <div class="mobile-status-group group-${statusKey}">
-            <div class="mobile-group-header">
-              <div class="group-header-left">
-                <span class="status-indicator"></span>
-                <span class="group-title">${status}</span>
-              </div>
-              <span class="group-count-tag">${groupItems.length}件</span>
+      const sortedDates = Object.keys(dateGroups).sort();
+      sortedDates.forEach(dStr => {
+        const items = dateGroups[dStr];
+        const f = this.formatShortDate(dStr);
+
+        // ID を設定してスクロールできるようにする (例: agenda_day_2026-08-19)
+        agendaHtml += `
+          <div class="agenda-day-block" id="agenda_day_${dStr}">
+            <div class="agenda-day-heading">
+              <span>📅 ${f.monthDay} (${f.weekday})</span>
+              <span>${items.length}件</span>
             </div>
-            <div class="mobile-group-body">
+            <div class="mobile-group-body" style="padding: 4px 0;">
         `;
 
-        groupItems.forEach(item => {
+        items.forEach(item => {
+          const normStatus = this.normalizeStatus(item.status);
+          const isField = (normStatus === "現場");
           const memberTags = (item.members || []).map(m => `<span class="member-chip-sm">${this.escapeHtml(m)}</span>`).join('');
+          const statusKey = this.getStatusKey(normStatus);
 
-          if (isFieldStatus) {
-            html += `
-              <div class="mobile-event-card" onclick="window.app.openDetailModal('${item.id}')">
-                <div class="event-title">${this.escapeHtml(item.title || '(案件名未設定)')}</div>
+          agendaHtml += `
+            <div class="mobile-event-card ${!isField ? 'mobile-event-card-compact' : ''}" onclick="window.app.openDetailModal('${item.id}')">
+              ${isField ? `
+                <div class="event-title"><span class="legend-color" style="display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--status-field-accent); margin-right:4px;"></span>${this.escapeHtml(item.title || '(現場)')}</div>
                 ${item.details ? `<div class="event-details">${this.escapeHtml(item.details)}</div>` : ''}
                 <div class="event-footer">
                   <div class="event-members">${memberTags}</div>
-                  <span class="view-detail-hint">${this.isAdmin ? '詳細 / 編集' : '詳細'} &rsaquo;</span>
+                  <span class="view-detail-hint">詳細 &rsaquo;</span>
                 </div>
-              </div>
-            `;
-          } else {
-            html += `
-              <div class="mobile-event-card mobile-event-card-compact" onclick="window.app.openDetailModal('${item.id}')">
+              ` : `
                 <div class="event-footer" style="margin-top:0; padding-top:0; border-top:none;">
-                  <div class="event-members event-members-large">${memberTags || '<span style="font-size:11px; color:var(--text-muted);">未設定</span>'}</div>
-                  <span class="view-detail-hint">${this.isAdmin ? '詳細 / 編集' : '詳細'} &rsaquo;</span>
+                  <span class="modal-status-pill status-${statusKey}" style="font-size:10px; padding:2px 8px;">${normStatus}</span>
+                  <div class="event-members">${memberTags || '<span style="font-size:10px; color:var(--text-muted);">未設定</span>'}</div>
+                  <span class="view-detail-hint">詳細 &rsaquo;</span>
                 </div>
-                ${item.details ? `<div class="event-details" style="margin-top:6px;">${this.escapeHtml(item.details)}</div>` : ''}
-              </div>
-            `;
-          }
+                ${item.details ? `<div class="event-details" style="margin-top:4px;">${this.escapeHtml(item.details)}</div>` : ''}
+              `}
+            </div>
+          `;
         });
 
-        html += `
-            </div>
-          </div>
-        `;
+        agendaHtml += `</div></div>`;
       });
     }
 
-    this.mobileCardsContainer.innerHTML = html;
+    this.mobileMonthAgendaList.innerHTML = agendaHtml;
   }
 
-  // ================= Mobile Month View (常に1ヶ月カレンダー＋連続アジェンダ一覧) =================
-  renderMobileMonthly() {
+  renderMobileMonthlyCalendarOnly() {
     const [yearStr, monthStr] = this.currentYearMonth.split('-');
     const year = Number(yearStr);
     const month = Number(monthStr);
@@ -1765,7 +1636,6 @@ class ScheduleApp {
 
     const filtered = this.filterList(this.schedules);
 
-    // 1. 上部ミニカレンダーのマス目生成
     let gridHtml = "";
     for (let i = 0; i < startWeekday; i++) {
       gridHtml += `<div class="cal-day-cell other-month"></div>`;
@@ -1785,119 +1655,13 @@ class ScheduleApp {
       }
 
       gridHtml += `
-        <div class="cal-day-cell ${isSelected ? 'selected-day' : ''} ${isToday ? 'today-marker' : ''}" id="cal_cell_${dateStr}" onclick="window.app.onSelectMonthDay('${dateStr}')">
+        <div class="cal-day-cell ${isSelected ? 'selected-day' : ''} ${isToday ? 'today-marker' : ''}" onclick="window.app.onSelectMonthDay('${dateStr}')">
           <span>${d}</span>
           ${dotsHtml}
         </div>
       `;
     }
     this.mobileMonthCalendarGrid.innerHTML = gridHtml;
-
-    // 2. 下部アジェンダリスト（1日〜末日まで日付順に連続して並ぶ）
-    const monthSchedules = filtered.filter(s => s.date && s.date.startsWith(this.currentYearMonth));
-
-    if (this.mobileAgendaTitle) this.mobileAgendaTitle.textContent = `${month}月のスケジュール一覧`;
-    if (this.mobileAgendaCount) this.mobileAgendaCount.textContent = `全${monthSchedules.length}件`;
-
-    let agendaHtml = "";
-    for (let d = 1; d <= daysInMonth; d++) {
-      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      const items = filtered.filter(s => s.date === dateStr);
-      const f = this.formatShortDate(dateStr);
-      const isSelected = (dateStr === this.currentDate);
-      const isToday = (dateStr === this.realToday);
-
-      let headingClass = "";
-      if (f.weekday === "日") headingClass = "sunday-heading";
-      else if (f.weekday === "土") headingClass = "weekend-heading";
-
-      agendaHtml += `
-        <div class="agenda-day-block ${isSelected ? 'agenda-day-selected' : ''}" id="agenda_day_${dateStr}" data-date="${dateStr}">
-          <div class="agenda-day-heading ${headingClass}" onclick="window.app.onSelectMonthDay('${dateStr}')">
-            <span>📅 ${f.monthDay} (${f.weekday}) ${isToday ? '<span style="font-size:10px; background:#2563eb; color:white; padding:1px 6px; border-radius:10px; margin-left:4px;">今日</span>' : ''}</span>
-            <span style="font-size:11px; font-weight:700; color:var(--text-muted);">${items.length > 0 ? items.length + '件' : '予定なし'}</span>
-          </div>
-          <div class="mobile-group-body" style="padding: 2px 0 6px;">
-      `;
-
-      if (items.length === 0) {
-        agendaHtml += `
-          <div class="agenda-day-empty-note">
-            予定はありません
-            ${this.isAdmin ? `<button type="button" class="btn-text-link" style="margin-left:6px;" onclick="window.app.openCreateModal('${dateStr}', '現場')">＋ 追加</button>` : ''}
-          </div>
-        `;
-      } else {
-        items.forEach(item => {
-          const normStatus = this.normalizeStatus(item.status);
-          const isField = (normStatus === "現場");
-          const memberTags = (item.members || []).map(m => `<span class="member-chip-sm">${this.escapeHtml(m)}</span>`).join('');
-          const statusKey = this.getStatusKey(normStatus);
-
-          agendaHtml += `
-            <div class="mobile-event-card ${!isField ? 'mobile-event-card-compact' : ''}" onclick="window.app.openDetailModal('${item.id}')">
-              ${isField ? `
-                <div class="event-title"><span class="legend-color" style="display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--status-field-accent); margin-right:4px;"></span>${this.escapeHtml(item.title || '(現場)')}</div>
-                ${item.details ? `<div class="event-details">${this.escapeHtml(item.details)}</div>` : ''}
-                <div class="event-footer">
-                  <div class="event-members">${memberTags}</div>
-                  <span class="view-detail-hint">${this.isAdmin ? '詳細 / 編集' : '詳細'} &rsaquo;</span>
-                </div>
-              ` : `
-                <div class="event-footer" style="margin-top:0; padding-top:0; border-top:none;">
-                  <span class="modal-status-pill status-${statusKey}" style="font-size:10px; padding:2px 8px;">${normStatus}</span>
-                  <div class="event-members">${memberTags || '<span style="font-size:10px; color:var(--text-muted);">未設定</span>'}</div>
-                  <span class="view-detail-hint">${this.isAdmin ? '詳細 / 編集' : '詳細'} &rsaquo;</span>
-                </div>
-                ${item.details ? `<div class="event-details" style="margin-top:4px;">${this.escapeHtml(item.details)}</div>` : ''}
-              `}
-            </div>
-          `;
-        });
-      }
-
-      agendaHtml += `</div></div>`;
-    }
-
-    this.mobileMonthAgendaList.innerHTML = agendaHtml;
-  }
-
-  // カレンダーの日付タップ時に、その日付の位置へスムーズ自動スクロール＆フォーカス
-  onSelectMonthDay(dateStr) {
-    this.currentDate = dateStr;
-    
-    // カレンダーの選択スタイル更新
-    document.querySelectorAll('.cal-day-cell').forEach(cell => cell.classList.remove('selected-day'));
-    const targetCell = document.getElementById(`cal_cell_${dateStr}`);
-    if (targetCell) {
-      targetCell.classList.add('selected-day');
-    }
-
-    // アジェンダ一覧内の該当する日付位置へスムーズに自動スクロール
-    const agendaEl = document.getElementById(`agenda_day_${dateStr}`);
-    if (agendaEl) {
-      agendaEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      agendaEl.classList.remove('agenda-day-focused');
-      void agendaEl.offsetWidth; // リフロー強制
-      agendaEl.classList.add('agenda-day-focused');
-    }
-
-    this.updateHeaderDates();
-  }
-
-  render() {
-    if (this.currentView === "pc") {
-      this.renderPcMatrix();
-    } else {
-      // スマホ表示は常に1ヶ月カレンダー＋連続アジェンダ一覧
-      this.renderMobileMonthly();
-    }
-  }
-
-  selectDate(dateStr) {
-    this.currentDate = dateStr;
-    this.updateHeaderDates();
-    this.render();
   }
 
   getStatusKey(status) {
