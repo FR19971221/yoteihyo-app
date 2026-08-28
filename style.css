@@ -2405,40 +2405,13 @@ body.mode-readonly .empty-matrix-slot {
     display: flex;
   }
 
-  .view-toggle-btn .btn-label-text {
-    display: none;
+  /* Hide view toggle (PC/スマホ) and span toggle (1週間/半月) in mobile view */
+  .view-toggle-container {
+    display: none !important;
   }
 
-  .view-toggle-btn {
-    padding: 6px 10px;
-  }
-
-  .filter-ribbon {
-    margin-top: 8px;
-    padding-top: 8px;
-    gap: 8px;
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-
-  .filter-ribbon::-webkit-scrollbar {
-    display: none;
-  }
-
-  .span-toggle-group,
-  .filter-group {
-    flex-shrink: 0;
-  }
-
-  .span-tabs {
-    padding: 2px;
-  }
-
-  .span-tab {
-    padding: 4px 8px;
-    font-size: 11px;
+  .span-toggle-group {
+    display: none !important;
   }
 
   .member-filter-list {
