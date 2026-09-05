@@ -9,8 +9,30 @@ const STATUS_LIST = [
   "休み",
   "有休",
   "5階泊",
-  "レンタル機材"
+  "ﾎﾃル泊",
+  "レンタル機材借り出し/返却"
 ];
+
+const COMPANY_HOLIDAYS = {
+  "2026-01-01": "元日",
+  "2026-01-12": "成人の日",
+  "2026-02-11": "建国記念の日",
+  "2026-02-23": "天皇誕生日",
+  "2026-03-20": "春分の日",
+  "2026-04-29": "昭和の日",
+  "2026-05-03": "憲法記念日",
+  "2026-05-04": "みどりの日",
+  "2026-05-05": "こどもの日",
+  "2026-05-06": "振替休日",
+  "2026-07-20": "海の日",
+  "2026-08-11": "山の日",
+  "2026-09-21": "敬老の日",
+  "2026-09-22": "国民の休日",
+  "2026-09-23": "秋分の日",
+  "2026-10-12": "スポーツの日",
+  "2026-11-03": "文化の日",
+  "2026-11-23": "勤労感謝の日"
+};
 
 const INITIAL_MEMBERS = ["M", "R", "Z", "吉", "黒", "佐藤"];
 
@@ -143,7 +165,7 @@ class ScheduleApp {
     if (st.includes("休")) return "休み";
     if (st.includes("5階") || st.includes("５階")) return "5階泊";
     if (st.includes("ホテル") || st.includes("ﾎﾃル") || st.includes("宿泊") || st.includes("泊")) return "ﾎﾃル泊";
-    if (st.includes("レンタル") || st.includes("機材")) return "レンタル機材";
+    if (st.includes("レンタル") || st.includes("機材")) return "レンタル機材借り出し/返却";
     return "現場";
   }
 
@@ -375,7 +397,11 @@ class ScheduleApp {
         this.generateDateRange(this.currentDate);
         this.updateHeaderDates();
         this.render();
-        this.onSelectMonthDay(this.realToday);
+        if (this.currentView === "pc") {
+          this.scrollToToday();
+        } else {
+          this.onSelectMonthDay(this.realToday);
+        }
       });
     }
 
@@ -833,6 +859,79 @@ class ScheduleApp {
         });
       }
     });
+  }
+
+  openBatchModal() {
+    if (!this.isAdmin) {
+      alert("一括操作を行うには管理者ログインが必要です。");
+      return;
+    }
+    if (!this.batchModal) return;
+
+    if (this.bulkStartDate) this.bulkStartDate.value = this.currentDate;
+    if (this.bulkEndDate) this.bulkEndDate.value = this.currentDate;
+    if (this.bulkStatus) this.bulkStatus.value = "現場";
+    if (this.bulkTitle) this.bulkTitle.value = "";
+    if (this.bulkDetails) this.bulkDetails.value = "";
+
+    if (this.deleteStartDate) this.deleteStartDate.value = this.currentDate;
+    if (this.deleteEndDate) this.deleteEndDate.value = this.currentDate;
+    if (this.deleteStatusFilter) this.deleteStatusFilter.value = "ALL";
+
+    this.renderBulkMemberSelector();
+    this.renderDeleteMemberFilterOptions();
+
+    // タブを「期間一括登録」にリセット
+    document.querySelectorAll(".batch-tab").forEach(t => t.classList.remove("active"));
+    document.querySelectorAll(".batch-tab-content").forEach(c => c.classList.remove("active"));
+    const firstTab = document.querySelector('.batch-tab[data-tab="bulk-add"]');
+    if (firstTab) firstTab.classList.add("active");
+    const firstContent = document.getElementById("tabBulkAdd");
+    if (firstContent) firstContent.classList.add("active");
+
+    this.batchModal.classList.add("active");
+    this.batchModal.setAttribute("aria-hidden", "false");
+  }
+
+  closeBatchModal() {
+    if (!this.batchModal) return;
+    this.batchModal.classList.remove("active");
+    this.batchModal.setAttribute("aria-hidden", "true");
+  }
+
+  renderBulkMemberSelector() {
+    if (!this.bulkMemberSelector) return;
+    let html = "";
+    this.allMembers.forEach(m => {
+      html += `
+        <label class="member-checkbox-pill">
+          <input type="checkbox" name="bulkMember" value="${this.escapeHtml(m)}">
+          <span>${this.escapeHtml(m)}</span>
+        </label>
+      `;
+    });
+    this.bulkMemberSelector.innerHTML = html;
+  }
+
+  renderDeleteMemberFilterOptions() {
+    if (!this.deleteMemberFilter) return;
+    let html = `<option value="ALL">全員対象</option>`;
+    this.allMembers.forEach(m => {
+      html += `<option value="${this.escapeHtml(m)}">${this.escapeHtml(m)}のみ</option>`;
+    });
+    this.deleteMemberFilter.innerHTML = html;
+  }
+
+  scrollToToday() {
+    if (this.matrixScrollWrapper && this.matrixTableContainer) {
+      setTimeout(() => {
+        const todayTh = this.matrixTableContainer.querySelector("th.today-col, th.selected-col");
+        if (todayTh) {
+          const targetOffset = Math.max(0, todayTh.offsetLeft - 140);
+          this.matrixScrollWrapper.scrollTo({ left: targetOffset, behavior: "smooth" });
+        }
+      }, 50);
+    }
   }
 
   async handleBulkAdd() {
@@ -1318,14 +1417,16 @@ class ScheduleApp {
       if (this.btnMobileView) this.btnMobileView.classList.remove("active");
       if (this.pcSection) this.pcSection.classList.add("active");
       if (this.mobileSection) this.mobileSection.classList.remove("active");
+      this.render();
+      this.scrollToToday();
     } else {
       if (this.btnMobileView) this.btnMobileView.classList.add("active");
       if (this.btnPcView) this.btnPcView.classList.remove("active");
       if (this.mobileSection) this.mobileSection.classList.add("active");
       if (this.pcSection) this.pcSection.classList.remove("active");
       this.mobileSubMode = "month";
+      this.render();
     }
-    this.render();
   }
 
   formatDateJP(dateStr) {
@@ -1684,14 +1785,7 @@ class ScheduleApp {
     this.mobileMonthCalendarGrid.innerHTML = gridHtml;
   }
 
-  getStatusKey(status) {
-    const norm = this.normalizeStatus(status);
-    if (norm.includes("現場")) return "field";
-    if (norm.includes("社内")) return "office";
-    if (norm.includes("休") || norm.includes("有休")) return "off";
-    if (norm.includes("泊") || norm.includes("5階") || norm.includes("ﾎﾃル")) return "stay";
-    return "field";
-  }
+
 
   openDetailModal(itemId) {
     let item = this.schedules.find(s => s.id === itemId);

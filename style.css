@@ -2459,7 +2459,7 @@ body.mode-readonly .empty-matrix-slot {
   }
 }
 
-/* ================= Responsive ================= */
+/* ================= Responsive (Tablet / Small Desktop <= 860px) ================= */
 @media (max-width: 860px) {
   .app-header {
     padding: 10px 16px;
@@ -2476,116 +2476,130 @@ body.mode-readonly .empty-matrix-slot {
   .form-row-2 {
     grid-template-columns: 1fr;
   }
+}
 
-  /* --- スクロールとなめらかさの調整（修正版） --- */
-  .matrix-scroll-wrapper,
-  .mobile-date-strip,
-  .filter-ribbon {
-    display: block;
-    overflow-x: auto !important;
-    scroll-behavior: smooth !important;
-    -webkit-overflow-scrolling: touch !important;
-    scroll-snap-type: none !important;
+/* ================= スクロールとなめらかさの調整 ================= */
+.matrix-scroll-wrapper,
+.mobile-date-strip,
+.filter-ribbon {
+  display: block;
+  overflow-x: auto !important;
+  scroll-behavior: smooth !important;
+  -webkit-overflow-scrolling: touch !important;
+  scroll-snap-type: none !important;
+}
+
+/* ================= レンタル機材借り出し/返却 & 休日スタイル ================= */
+:root {
+  --status-rental-bg: #fdf2f8;
+  --status-rental-border: #fbcfe8;
+  --status-rental-text: #9d174d;
+  --status-rental-accent: #ec4899;
+}
+
+.status-rental .legend-color,
+.legend-chip.status-rental .legend-color,
+.modal-status-pill.status-rental {
+  background: var(--status-rental-accent);
+  color: #fff;
+}
+
+.status-rental {
+  background: var(--status-rental-bg);
+  border-left: 4px solid var(--status-rental-accent) !important;
+  color: var(--status-rental-text);
+}
+
+.card-status-rental {
+  background: var(--status-rental-bg) !important;
+  border: 1px solid var(--status-rental-border) !important;
+  border-left: 3px solid var(--status-rental-accent) !important;
+  color: var(--status-rental-text) !important;
+}
+
+.card-status-rental::before {
+  background: var(--status-rental-accent);
+}
+
+.cal-dot-rental {
+  background: var(--status-rental-accent) !important;
+}
+
+/* 祝日・休日ハイライト */
+.holiday-col,
+.cal-day-cell.holiday-day {
+  background-color: #fff1f2 !important;
+}
+
+.holiday-text {
+  color: #e11d48 !important;
+  font-weight: 800;
+}
+
+.holiday-badge {
+  font-size: 10px;
+  background: #ffe4e6;
+  color: #be123c;
+  padding: 1px 4px;
+  border-radius: 4px;
+  margin-left: 4px;
+}
+
+/* ================= スマホ版 複数日連結バーの装飾 ================= */
+.mobile-event-card.card-span-start {
+  border-bottom-left-radius: 2px !important;
+  border-bottom-right-radius: 2px !important;
+  border-bottom: 2px dashed rgba(0, 0, 0, 0.15) !important;
+  margin-bottom: 2px !important;
+}
+
+.mobile-event-card.card-span-middle {
+  border-radius: 2px !important;
+  border-top: none !important;
+  border-bottom: 2px dashed rgba(0, 0, 0, 0.15) !important;
+  margin-top: 0 !important;
+  margin-bottom: 2px !important;
+}
+
+.mobile-event-card.card-span-end {
+  border-top-left-radius: 2px !important;
+  border-top-right-radius: 2px !important;
+  border-top: none !important;
+  margin-top: 0 !important;
+}
+
+/* ================= スマホ表示の完全強制化 & 不要ボタン非表示 (<= 768px) ================= */
+@media screen and (max-width: 768px) {
+  /* PC用マトリックス表を完全に隠す */
+  #pcMatrixSection,
+  #matrix-view,
+  .matrix-card-container,
+  .pane-header {
+    display: none !important;
   }
 
-  /* --- スマホ表示の完全強制化（オーバーライド設定） --- */
-  @media screen and (max-width: 768px) {
+  /* スマホ専用セクションを全幅で強制表示 */
+  #mobileDailySection,
+  #mobile-view {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+  }
 
-    /* PC用マトリックス表を完全に隠す */
-    #pcMatrixSection,
-    #matrix-view,
-    .matrix-card-container,
-    .pane-header {
-      display: none !important;
-    }
+  /* 枠線や固定幅を解除して画面いっぱいに広げる */
+  .mobile-phone-frame {
+    max-width: 100% !important;
+    width: 100% !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
 
-    /* スマホ専用セクションを全幅で強制表示 */
-    #mobileDailySection,
-    #mobile-view {
-      display: block !important;
-      width: 100% !important;
-      max-width: 100vw !important;
-    }
-
-    /* 枠線やシミュレーター風の固定幅を解除して画面いっぱいに広げる */
-    .mobile-phone-frame {
-      max-width: 100% !important;
-      width: 100% !important;
-      border: none !important;
-      border-radius: 0 !important;
-      box-shadow: none !important;
-    }
-
-    /* --- スマホ用 不要ボタンの非表示 --- */
-    @media screen and (max-width: 768px) {
-
-      .view-toggle-container,
-      .span-toggle-group,
-      .mobile-mode-switcher-bar,
-      .mobile-date-strip-wrapper {
-        display: none !important;
-      }
-    }
-
-    /* --- レンタル機材・休日表示のスタイル追加 --- */
-    :root {
-      --status-rental-bg: #fdf2f8;
-      --status-rental-border: #fbcfe8;
-      --status-rental-text: #9d174d;
-      --status-rental-accent: #ec4899;
-    }
-
-    .card-status-rental::before {
-      background: var(--status-rental-accent);
-    }
-
-    .card-status-rental {
-      background: var(--status-rental-bg);
-      border-color: var(--status-rental-border);
-      color: var(--status-rental-text);
-    }
-
-    .cal-dot-rental {
-      background: var(--status-rental-accent);
-    }
-
-    /* 祝日・休日ハイライト */
-    .holiday-col,
-    .cal-day-cell.holiday-day {
-      background-color: #fff1f2 !important;
-    }
-
-    .holiday-text {
-      color: #e11d48 !important;
-      font-weight: 800;
-    }
-
-    .holiday-badge {
-      font-size: 10px;
-      background: #ffe4e6;
-      color: #be123c;
-      padding: 1px 4px;
-      border-radius: 4px;
-      margin-left: 4px;
-    }
-
-    /* スマホ版 複数日連結バーの装飾強化 */
-    .mobile-event-card.card-span-start {
-      border-bottom-left-radius: 0;
-      border-bottom-right-radius: 0;
-      border-bottom: 1px dashed var(--border-light);
-    }
-
-    .mobile-event-card.card-span-middle {
-      border-radius: 0;
-      border-top: none;
-      border-bottom: 1px dashed var(--border-light);
-    }
-
-    .mobile-event-card.card-span-end {
-      border-top-left-radius: 0;
-      border-top-right-radius: 0;
-      border-top: none;
-    }
+  /* 不要ボタン・切替タブの完全非表示 */
+  .view-toggle-container,
+  .span-toggle-group,
+  .mobile-mode-switcher-bar,
+  .mobile-date-strip-wrapper {
+    display: none !important;
   }
 }
