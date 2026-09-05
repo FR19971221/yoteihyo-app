@@ -1451,9 +1451,11 @@ body.mode-readonly .empty-matrix-slot {
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.4);
     transform: scale(1.01);
   }
+
   70% {
     background-color: rgba(37, 99, 235, 0.1);
   }
+
   100% {
     background-color: transparent;
     box-shadow: none;
@@ -2513,5 +2515,75 @@ body.mode-readonly .empty-matrix-slot {
       border-radius: 0 !important;
       box-shadow: none !important;
     }
-  }
-}
+
+    /* --- スマホ用 不要ボタンの非表示 --- */
+    @media screen and (max-width: 768px) {
+
+      .view-toggle-container,
+      .span-toggle-group,
+      .mobile-mode-switcher-bar,
+      .mobile-date-strip-wrapper {
+        display: none !important;
+      }
+    }
+
+    /* --- レンタル機材・休日表示のスタイル追加 --- */
+    :root {
+      --status-rental-bg: #fdf2f8;
+      --status-rental-border: #fbcfe8;
+      --status-rental-text: #9d174d;
+      --status-rental-accent: #ec4899;
+    }
+
+    .card-status-rental::before {
+      background: var(--status-rental-accent);
+    }
+
+    .card-status-rental {
+      background: var(--status-rental-bg);
+      border-color: var(--status-rental-border);
+      color: var(--status-rental-text);
+    }
+
+    .cal-dot-rental {
+      background: var(--status-rental-accent);
+    }
+
+    /* 祝日・休日ハイライト */
+    .holiday-col,
+    .cal-day-cell.holiday-day {
+      background-color: #fff1f2 !important;
+    }
+
+    .holiday-text {
+      color: #e11d48 !important;
+      font-weight: 800;
+    }
+
+    .holiday-badge {
+      font-size: 10px;
+      background: #ffe4e6;
+      color: #be123c;
+      padding: 1px 4px;
+      border-radius: 4px;
+      margin-left: 4px;
+    }
+
+    /* スマホ版 複数日連結バーの装飾強化 */
+    .mobile-event-card.card-span-start {
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+      border-bottom: 1px dashed var(--border-light);
+    }
+
+    .mobile-event-card.card-span-middle {
+      border-radius: 0;
+      border-top: none;
+      border-bottom: 1px dashed var(--border-light);
+    }
+
+    .mobile-event-card.card-span-end {
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+      border-top: none;
+    }

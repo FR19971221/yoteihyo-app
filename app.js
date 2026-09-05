@@ -9,7 +9,7 @@ const STATUS_LIST = [
   "休み",
   "有休",
   "5階泊",
-  "ﾎﾃル泊"
+  "レンタル機材"
 ];
 
 const INITIAL_MEMBERS = ["M", "R", "Z", "吉", "黒", "佐藤"];
@@ -109,7 +109,8 @@ class ScheduleApp {
     const center = new Date(y, m - 1, d);
     const range = [];
 
-    for (let i = -15; i <= 45; i++) {
+    // 前後4ヶ月（計240日分）を一括描画し、シームレスな連続横スクロールを実現
+    for (let i = -60; i <= 180; i++) {
       const target = new Date(center);
       target.setDate(target.getDate() + i);
       range.push(this.formatYmd(target));
@@ -142,7 +143,18 @@ class ScheduleApp {
     if (st.includes("休")) return "休み";
     if (st.includes("5階") || st.includes("５階")) return "5階泊";
     if (st.includes("ホテル") || st.includes("ﾎﾃル") || st.includes("宿泊") || st.includes("泊")) return "ﾎﾃル泊";
+    if (st.includes("レンタル") || st.includes("機材")) return "レンタル機材";
     return "現場";
+  }
+
+  getStatusKey(status) {
+    const norm = this.normalizeStatus(status);
+    if (norm.includes("現場")) return "field";
+    if (norm.includes("社内")) return "office";
+    if (norm.includes("休") || norm.includes("有休")) return "off";
+    if (norm.includes("泊") || norm.includes("5階") || norm.includes("ﾎﾃル")) return "stay";
+    if (norm.includes("レンタル") || norm.includes("機材")) return "rental";
+    return "field";
   }
 
   bindDom() {
@@ -1552,8 +1564,6 @@ class ScheduleApp {
   renderMobileMonthly() {
     if (this.mobileSubViewDay) this.mobileSubViewDay.classList.remove("active");
     if (this.mobileSubViewMonth) this.mobileSubViewMonth.classList.add("active");
-    if (this.mobileHeaderBadge) this.mobileHeaderBadge.style.display = "none";
-    if (this.mobileMonthNav) this.mobileMonthNav.style.display = "flex";
 
     this.renderMobileMonthlyCalendarOnly();
 
@@ -1563,42 +1573,29 @@ class ScheduleApp {
     const daysInMonth = new Date(year, month, 0).getDate();
     const filtered = this.filterList(this.schedules);
 
-    // 月全体のスケジュールを取得
-    const monthSchedules = filtered.filter(s => s.date && s.date.startsWith(this.currentYearMonth));
+    if (this.mobileAgendaTitle) this.mobileAgendaTitle.textContent = `${month}月の全スケジュール`;
 
-    if (this.mobileAgendaTitle) this.mobileAgendaTitle.textContent = `${month}月のスケジュール一覧`;
-    if (this.mobileAgendaCount) this.mobileAgendaCount.textContent = `${monthSchedules.length}件`;
-
-    // 1日〜末日まで日付順に連続して並べる
     let agendaHtml = "";
+    let totalCount = 0;
+
     for (let d = 1; d <= daysInMonth; d++) {
-      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      const items = filtered.filter(s => s.date === dateStr);
-      const f = this.formatShortDate(dateStr);
-      const isSelected = (dateStr === this.currentDate);
-      const isToday = (dateStr === this.realToday);
+      const dStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const items = filtered.filter(s => s.date === dStr);
+      const f = this.formatShortDate(dStr);
+      const holidayName = COMPANY_HOLIDAYS[dStr] || "";
+      totalCount += items.length;
 
-      let headingClass = "";
-      if (f.weekday === "日") headingClass = "sunday-heading";
-      else if (f.weekday === "土") headingClass = "weekend-heading";
-
-      // ID を設定してスクロールできるようにする (例: agenda_day_2026-08-19)
       agendaHtml += `
-        <div class="agenda-day-block ${isSelected ? 'agenda-day-selected' : ''}" id="agenda_day_${dateStr}" data-date="${dateStr}">
-          <div class="agenda-day-heading ${headingClass}">
-            <span>📅 ${f.monthDay} (${f.weekday}) ${isToday ? '<span style="font-size:10px; background:#2563eb; color:white; padding:1px 6px; border-radius:10px; margin-left:4px;">今日</span>' : ''}</span>
-            <span style="font-size:11px; font-weight:700; color:var(--text-muted);">${items.length > 0 ? items.length + '件' : '予定なし'}</span>
+        <div class="agenda-day-block" id="agenda_day_${dStr}" style="margin-bottom: 16px;">
+          <div class="agenda-day-heading ${holidayName || f.isWeekend ? 'holiday-col' : ''}" style="background:#e2e8f0; padding:6px 10px; border-radius:6px; font-weight:800; display:flex; justify-content:space-between; font-size:13px;">
+            <span class="${holidayName || f.isWeekend ? 'holiday-text' : ''}">📅 ${f.monthDay} (${f.weekday}) ${holidayName ? `<span class="holiday-badge">${holidayName}</span>` : ''}</span>
+            <span>${items.length}件</span>
           </div>
-          <div class="mobile-group-body" style="padding: 2px 0 6px;">
+          <div class="mobile-group-body" style="padding: 6px 0; display:flex; flex-direction:column; gap:8px;">
       `;
 
       if (items.length === 0) {
-        agendaHtml += `
-          <div class="agenda-day-empty-note">
-            予定はありません
-            ${this.isAdmin ? `<button type="button" class="btn-text-link" style="margin-left:6px;" onclick="window.app.openCreateModal('${dateStr}', '現場')">＋ 追加</button>` : ''}
-          </div>
-        `;
+        agendaHtml += `<div style="font-size:11px; color:#94a3b8; padding:4px 8px;">予定なし</div>`;
       } else {
         items.forEach(item => {
           const normStatus = this.normalizeStatus(item.status);
@@ -1606,22 +1603,34 @@ class ScheduleApp {
           const memberTags = (item.members || []).map(m => `<span class="member-chip-sm">${this.escapeHtml(m)}</span>`).join('');
           const statusKey = this.getStatusKey(normStatus);
 
+          // 複数日連結判定
+          const prevDateStr = this.addDaysToDateStr(dStr, -1);
+          const nextDateStr = this.addDaysToDateStr(dStr, 1);
+          const hasPrev = !!(item.title && filtered.find(s => s.date === prevDateStr && s.title === item.title && this.normalizeStatus(s.status) === normStatus));
+          const hasNext = !!(item.title && filtered.find(s => s.date === nextDateStr && s.title === item.title && this.normalizeStatus(s.status) === normStatus));
+
+          let spanClass = "";
+          let spanIndicator = "";
+          if (hasPrev && hasNext) { spanClass = "card-span-middle"; spanIndicator = " (継続)"; }
+          else if (!hasPrev && hasNext) { spanClass = "card-span-start"; spanIndicator = " ▶"; }
+          else if (hasPrev && !hasNext) { spanClass = "card-span-end"; spanIndicator = " ◀"; }
+
           agendaHtml += `
-            <div class="mobile-event-card ${!isField ? 'mobile-event-card-compact' : ''}" onclick="window.app.openDetailModal('${item.id}')">
+            <div class="mobile-event-card card-status-${statusKey} ${spanClass}" onclick="window.app.openDetailModal('${item.id}')">
               ${isField ? `
-                <div class="event-title"><span class="legend-color" style="display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--status-field-accent); margin-right:4px;"></span>${this.escapeHtml(item.title || '(現場)')}</div>
+                <div class="event-title"><span class="legend-color" style="display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--status-field-accent); margin-right:4px;"></span>${this.escapeHtml(item.title || '(現場)')}${spanIndicator}</div>
                 ${item.details ? `<div class="event-details">${this.escapeHtml(item.details)}</div>` : ''}
                 <div class="event-footer">
                   <div class="event-members">${memberTags}</div>
-                  <span class="view-detail-hint">${this.isAdmin ? '詳細 / 編集' : '詳細'} &rsaquo;</span>
+                  <span class="view-detail-hint">詳細 &rsaquo;</span>
                 </div>
               ` : `
-                <div class="event-footer" style="margin-top:0; padding-top:0; border-top:none;">
-                  <span class="modal-status-pill status-${statusKey}" style="font-size:10px; padding:2px 8px;">${normStatus}</span>
-                  <div class="event-members">${memberTags || '<span style="font-size:10px; color:var(--text-muted);">未設定</span>'}</div>
-                  <span class="view-detail-hint">${this.isAdmin ? '詳細 / 編集' : '詳細'} &rsaquo;</span>
+                <!-- 現場以外：タイトル（区分）と詳細・備考のみスッキリ表示 -->
+                <div class="event-title" style="font-size:13px; font-weight:700; color:var(--text-main);">
+                  <span class="modal-status-pill status-${statusKey}" style="font-size:10px; padding:2px 6px; margin-right:6px;">${normStatus}</span>
+                  ${this.escapeHtml(item.title && item.title !== normStatus ? item.title : '')} ${spanIndicator}
                 </div>
-                ${item.details ? `<div class="event-details" style="margin-top:4px;">${this.escapeHtml(item.details)}</div>` : ''}
+                ${item.details ? `<div class="event-details" style="margin-top:4px; font-size:12px; color:var(--text-muted);">${this.escapeHtml(item.details)}</div>` : ''}
               `}
             </div>
           `;
@@ -1631,6 +1640,7 @@ class ScheduleApp {
       agendaHtml += `</div></div>`;
     }
 
+    if (this.mobileAgendaCount) this.mobileAgendaCount.textContent = `${totalCount}件`;
     this.mobileMonthAgendaList.innerHTML = agendaHtml;
   }
 
